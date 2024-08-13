@@ -1,10 +1,9 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Xml.Serialization;
 
 namespace Code_Report
 {
@@ -27,6 +26,16 @@ namespace Code_Report
                 serializer.Serialize(file, objectToWrite);
             }
         }
+
+        public static void WriteToXmlFile<T>(String path, T file)
+        {
+            XmlSerializer serializer = new XmlSerializer(typeof(T));
+
+            using (StreamWriter writer = new StreamWriter(path))
+            {
+                serializer.Serialize(writer, file);
+            }
+        }
         public static T ReadFromBinaryFile<T>(string filePath)
         {
             using (Stream stream = File.Open(filePath, FileMode.Open))
@@ -34,6 +43,20 @@ namespace Code_Report
                 var binaryFormatter = new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter();
                 return (T)binaryFormatter.Deserialize(stream);
             }
+        }
+        public static DateTime convertDateTime(string input, string dateFormat)
+        {
+            var culture = System.Globalization.CultureInfo.CurrentCulture;
+            DateTime dateTime = DateTime.ParseExact(input, dateFormat, culture);
+            return dateTime;
+        }
+        public static List<int> ColorToList(Color color)
+        {
+            return new List<int> { color.A, color.R, color.G, color.B  };
+        }
+        public static Color ListToColor(List<int> list)
+        {
+            return Color.FromArgb(list[0], list[1], list[2], list[3]);
         }
     }
 }

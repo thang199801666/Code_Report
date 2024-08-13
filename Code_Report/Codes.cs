@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace Code_Report
 {
     [Serializable]
-    public class Codes
+    class Codes
     {
         private string _Type = "";
         public string Number { get; set; } = "";
@@ -34,6 +34,7 @@ namespace Code_Report
             this.LatestCode = string.Empty;
             this.IssueDate = string.Empty;
             this.ExpirationDate = string.Empty;
+            GC.Collect();
         }
 
         public void setType(string type)

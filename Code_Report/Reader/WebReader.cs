@@ -1,15 +1,16 @@
-﻿using Microsoft.Office.Interop.Excel;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Edge;
 using OpenQA.Selenium.Support.UI;
+using SeleniumExtras.WaitHelpers;
+using WebDriverManager.DriverConfigs.Impl;
+using WebDriverManager.Helpers;
 
 namespace Code_Report
 {
@@ -17,47 +18,82 @@ namespace Code_Report
     {
         private string _url;
         private string _currentDir;
+        private string _previousLink;
         WebDriver _driver;
-        WebDriverWait _wait;
         WebClient _webClient;
+        WebDriverWait wait;
 
-        public WebReader()
+        public WebReader(bool headless = false)
         {
+            try 
+            {
+                System.IO.DirectoryInfo di = new DirectoryInfo(Path.Combine(Directory.GetCurrentDirectory(), "Edge"));
+                DirectoryInfo[] dirs = di.GetDirectories();
+                foreach (DirectoryInfo dir in dirs)
+                {
+                    if (dir != dirs.Last())
+                    {
+                        dir.Delete(true);
+                    }    
+                }
+                updateVersion();
+            }
+            catch 
+            { 
+            }
+
             EdgeOptions option = new EdgeOptions();
-            //option.AddArgument("--headless");
+            if (headless)
+            {
+                option.AddArgument("--headless");
+            }
             option.AddArgument("--silent");
             option.AddArgument("--disable-gpu");
             option.AddArgument("--log-level=3");
-            //option.AddArgument("--remote-debugging-port=9222");
+            option.AddArgument("--disable-notifications");
+            option.AddArgument("--disable-popup-blocking");
+            option.AddArgument("--blink-settings=imagesEnabled=false");
             EdgeDriverService service = EdgeDriverService.CreateDefaultService();
             service.SuppressInitialDiagnosticInformation = true;
             service.HideCommandPromptWindow = true;
-
             this._driver = new EdgeDriver(service, option);
-            //this._driver.Manage().Window.Minimize();
-            WebDriverWait wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(10));
-
+            this._driver.Manage().Window.Minimize();
+            wait = new WebDriverWait(_driver, TimeSpan.FromSeconds(480));
             _currentDir = Environment.CurrentDirectory;
         }
         ~WebReader()
         {
-            //this._driver.Close();
-            //this._driver.Quit();
+            try
+            {
+                this._driver.Close();
+                this._driver.Quit();
+            }
+            catch (Exception ex) { }
         }
 
+        public void closeDriver()
+        {
+            try
+            {
+                var tabs = _driver.WindowHandles;
+                foreach (var tab in tabs)
+                {
+                    _driver.SwitchTo().Window(tab);
+                    _driver.Close();
+                }
+            }
+            catch (Exception ex) { }
+            this._driver.Quit();
+        }
         public void runUrl(string Url)
         {
             this._url = Url;
             if (Uri.IsWellFormedUriString(Url, UriKind.Absolute))
             {
+                //_driver.SwitchTo().NewWindow(WindowType.Tab);
+                //_driver.SwitchTo().Window(_driver.WindowHandles.Last());
                 _driver.Navigate().GoToUrl(Url);
             }
-        }
-
-        public void closeDriver()
-        {
-            this._driver.Close();
-            this._driver.Quit();
         }
 
         public void closeAllTab()
@@ -66,7 +102,6 @@ namespace Code_Report
 
             foreach (var tab in tabs)
             {
-                // "tab" is a string like "CDwindow-6E793DA3E15E2AB5D6AE36A05344C68"
                 if (tabs[0] != tab)
                 {
                     _driver.SwitchTo().Window(tab);
@@ -78,30 +113,6 @@ namespace Code_Report
         {
             WebClient webClient = new WebClient();
             webClient.DownloadFile(new Uri(Url), fileName);
-        }
-
-        public void downloadFileAsync(string Url, string fileName)
-        {
-            _webClient = new WebClient();
-            _webClient.DownloadFileCompleted += webClient_DownloadFileCompleted;
-            _webClient.DownloadProgressChanged += webClient_DownloadProgressChanged;
-            _webClient.DownloadFileAsync(new Uri(Url), fileName);
-
-        }
-
-        private void _webClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
-        {
-            throw new NotImplementedException();
-        }
-
-        private void webClient_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
-        {
-            Console.WriteLine("Download finished");
-        }
-
-        private void webClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
-        {
-            Console.WriteLine("Downloading... Progress: {0} ({1} bytes / {2} bytes)", e.ProgressPercentage, e.BytesReceived, e.TotalBytesToReceive);
         }
 
         public List<IWebElement> extractTable(By itemSpecifier)
@@ -206,7 +217,7 @@ namespace Code_Report
         /// <summary>
         /// Track Report for https://icc-es.org
         /// </summary>
-        public string trackICCESReport(string Url, string reportNumber)
+        public string trackICCESReport(string Url, string reportNumber, string targetDir)
         {
             if (_url != Url)
             {
@@ -214,49 +225,65 @@ namespace Code_Report
                 _url = Url;
             }
             string outputText = "";
-            IWebElement searchBox = _driver.FindElement(By.Id("report_display_name"));
-            searchBox.Clear();
+            IWebElement searchBox = wait.Until(ExpectedConditions.ElementIsVisible(By.Id("report_display_name")));
+            ((IJavaScriptExecutor)_driver).ExecuteScript("arguments[0].scrollIntoView(true);arguments[0].value = '';", searchBox);
+            //searchBox.Clear();
             searchBox.SendKeys(reportNumber);
-            IWebElement searchBtn = _driver.FindElement(By.XPath("//*[@id=\"reportstabinner\"]/div[2]/form/div[6]/div/button[1]"));
-            searchBtn.Click();
+            IWebElement searchBtn = wait.Until(ExpectedConditions.ElementToBeClickable(By.XPath("//*[@id=\"reportstabinner\"]/div[2]/form/div[6]/div/button[1]")));
+            searchBtn.SendKeys(Keys.Enter);
 
-            WaitUntilVisible(_driver.FindElement(By.Id("esr_report_listing")), 60);
-            bool hasReport = checkElementByInterval(_driver.FindElement(By.XPath("//*[@id=\"esr_report_listing\"]/tbody")), "No Reports found", 10, 0.1);
+            IWebElement listingTable = wait.Until(ExpectedConditions.ElementIsVisible(By.Id("esr_report_listing")));
+            IWebElement firstRow = wait.Until(ExpectedConditions.ElementIsVisible(By.XPath("//*[@id=\"esr_report_listing\"]/tbody")));
 
-            List<IWebElement> resultTable = extractTable(By.Id("esr_report_listing"));
-            if (resultTable.Count > 0 && hasReport)
+            int count = 1;
+            while (count < 30)
             {
-                foreach (IWebElement row in resultTable)
+                if (!firstRow.Text.Contains("No Reports found") && firstRow.Text != "")
                 {
-                    string cellText = row.Text;
-                    var tds = row.FindElements(By.TagName("td"));
-                    string tabLink = tds[0].FindElements(By.TagName("a"))[0].GetAttribute("href");
-                    string name = tds[0].Text;
-                    _driver.SwitchTo().NewWindow(WindowType.Tab);
-                    _driver.SwitchTo().Window(_driver.WindowHandles.Last());
-                    _driver.Navigate().GoToUrl(tabLink);
-                    //_driver.Manage().Window.Minimize();
-                    IWebElement downloadBtn = WaitUntilVisible(_driver.FindElement(By.Id("download-link")), 10);
-                    string pdfLink = downloadBtn.GetAttribute("href");
-                    Console.WriteLine("Start Download File");
-                    downloadFileAsync(pdfLink, _currentDir + "//" + name + ".pdf");
-
-                    _driver.Close();
-                    _driver.SwitchTo().Window(_driver.WindowHandles.First());
-                    outputText = pdfLink;
+                    break;
                 }
+                Thread.Sleep(100);
+                count++;
+            }
+
+            while (firstRow.Text == _previousLink && !firstRow.Text.Contains("No Reports found"))
+            {
+                if (count > 60)
+                {
+                    break;
+                }
+                Thread.Sleep(100);
+                count++;
+            }
+
+            if (firstRow.Text.Contains("No Reports found"))
+            {
+                outputText = "No Reports found";
             }
             else
             {
-                outputText = "Code: " + reportNumber + " has no report!";
+                wait.Until(ExpectedConditions.ElementIsVisible(By.XPath("//*[@id=\"esr_report_listing\"]/tbody/tr/td[1]")));
+                IWebElement report = wait.Until(ExpectedConditions.ElementIsVisible(By.XPath("//*[@id=\"esr_report_listing\"]/tbody/tr/td[1]")));
+                string tabLink = report.FindElements(By.TagName("a"))[0].GetAttribute("href");//tds[0].FindElements(By.TagName("a"))[0].GetAttribute("href");
+                string name = report.Text;
+                _driver.SwitchTo().NewWindow(WindowType.Tab);
+                _driver.SwitchTo().Window(_driver.WindowHandles.Last());
+                _driver.Navigate().GoToUrl(tabLink);
+                IWebElement downloadBtn = wait.Until(ExpectedConditions.ElementIsVisible(By.Id("download-link")));
+                string pdfLink = downloadBtn.GetAttribute("href").ToString();
+                outputText = pdfLink;
+                //downloadFileAsync(pdfLink, _currentDir + "//Data//" + targetDir + "//" + name + ".pdf");
+                _driver.Close();
+                _driver.SwitchTo().Window(_driver.WindowHandles.First());
             }
+            _previousLink = firstRow.Text;
             return outputText;
         }
 
         /// <summary>
         /// Track Report for https://www.iapmoes.org/
         /// </summary>
-        public string trackIAPMOESReport(string Url, string reportNumber)
+        public string trackIAPMOESReport(string Url, string reportNumber, string targetDir)
         {
             if (_url != Url)
             {
@@ -264,40 +291,61 @@ namespace Code_Report
                 _url = Url;
             }
             string outputText = "";
-            IWebElement searchBox = _driver.FindElement(By.XPath("//*[@id=\"keyword\"]"));
+            IWebElement searchBox = wait.Until(ExpectedConditions.ElementIsVisible(By.XPath("//*[@id=\"keyword\"]")));
             searchBox.Clear();
-            searchBox.SendKeys(reportNumber);
-            IWebElement searchBtn = _driver.FindElement(By.XPath("//*[@id=\"main-content\"]/form/div/div[3]/button"));
-            searchBtn.Click();
+            searchBox.SendKeys(reportNumber.Split('-')[1]);
+            IWebElement searchBtn = wait.Until(ExpectedConditions.ElementIsVisible(By.XPath("//*[@id=\"main-content\"]/form/div/div[3]/button")));
+            wait.Until(ExpectedConditions.ElementToBeClickable(searchBtn)).Click();
+            //wait.Until(ExpectedConditions.ElementIsVisible(By.Id("searchTable")));
+            IWebElement table = wait.Until(ExpectedConditions.ElementIsVisible(By.XPath("//*[@id=\"searchTable\"]/tbody")));
 
-            WaitUntilVisible(_driver.FindElement(By.Id("searchTable")), 60);
-            bool hasReport = checkElementByInterval(_driver.FindElement(By.XPath("//*[@id=\"searchTable\"]/tbody")), "No data available in table", 10, 0.1);
-
-            List<IWebElement> resultTable = extractTable(By.Id("searchTable"));
-            if (resultTable.Count > 0 && hasReport)
+            int count = 1;
+            while (count<30)
             {
-                foreach (IWebElement row in resultTable)
+                if (!table.Text.Contains("No data available in table") && table.Text != "")
                 {
-                    string cellText = row.Text;
-                    var tds = row.FindElements(By.TagName("td"));
-                    string tabLink = tds[0].FindElements(By.TagName("a"))[0].GetAttribute("href");
-                    string name = tds[0].Text;
-                    Console.WriteLine("Start Download File");
-                    downloadFileAsync(tabLink, _currentDir + "//" + name + ".pdf");
-                    outputText = tabLink;
+                    break;
                 }
+                Thread.Sleep(100);
+                count++;
             }
-            else
+
+            if (table.Text.Contains("No data available in table"))
             {
-                outputText = "Code: " + reportNumber + " has no report!";
+                outputText = "No Reports found";
             }
+            else 
+            {
+                IList<IWebElement> trCollection = table.FindElements(By.TagName("tr"));
+                IList<IWebElement> tdCollection;
+                foreach (IWebElement element in trCollection)
+                {
+                    tdCollection = element.FindElements(By.TagName("td"));
+                    if (tdCollection[0].Text.Contains(reportNumber.Split('-')[1]))
+                    {
+                        string tabLink = tdCollection[0].FindElement(By.TagName("a")).GetAttribute("href");
+                        string name = tdCollection[0].Text;
+                        if (name.Contains("Cancelled"))
+                        {
+                            outputText = name;
+                        }
+                        else
+                        {
+                            //downloadFileAsync(tabLink, _currentDir + "//Data//" + targetDir + "//" + name + ".pdf");
+                            outputText = tabLink;
+                        }
+                        break;
+                    }
+                }        
+            }
+            
             return outputText;
         }
 
         /// <summary>
         /// Track Report for https://www.drjcertification.org
         /// </summary>
-        public void trackDRJCERTIFICATIONReport(string Url, string reportNumber)
+        public void trackDRJCERTIFICATIONReport(string Url, string reportNumber, string targetDir)
         {
             if (_url != Url)
             {
@@ -323,6 +371,43 @@ namespace Code_Report
                     }
                 }
             }
+        }
+        public bool RemoteFileExists(string url)
+        {
+            try
+            {
+                HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
+                request.Method = "HEAD";
+                HttpWebResponse response = request.GetResponse() as HttpWebResponse;
+                response.Close();
+                return (response.StatusCode == HttpStatusCode.OK);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        public void downloadFileAsync(string Url, string fileName)
+        {
+            _webClient = new WebClient();
+            _webClient.DownloadFileCompleted += webClient_DownloadFileCompleted;
+            _webClient.DownloadProgressChanged += webClient_DownloadProgressChanged;
+            _webClient.DownloadFileAsync(new Uri(Url), fileName);
+        }
+
+        private void webClient_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            Console.WriteLine("Download finished");
+        }
+
+        private void webClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+        {
+            Console.WriteLine("Downloading... Progress: {0} ({1} MC / {2} MB)", e.ProgressPercentage, e.BytesReceived, e.TotalBytesToReceive / 1024);
+        }
+
+        public void updateVersion()
+        {
+            new WebDriverManager.DriverManager().SetUpDriver(new EdgeConfig(), VersionResolveStrategy.MatchingBrowser);
         }
     }
 }

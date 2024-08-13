@@ -1,12 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Office.Interop.Excel;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Xml.Linq;
+using iText.Kernel.XMP.Impl;
+using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Spreadsheet;
+using System.Globalization;
+using DocumentFormat.OpenXml.Drawing.Charts;
+using Org.BouncyCastle.Asn1.Cms;
+
 
 namespace Code_Report
 {
@@ -19,101 +26,161 @@ namespace Code_Report
     internal class ExcelReader
     {
         private string _xlPath;
-        private Workbook _workBook;
+        System.IO.FileStream _stream;
+        XLWorkbook _workbook;
+        IXLWorksheet _worksheet;
 
-        private Microsoft.Office.Interop.Excel.Application _xlApp;
-        public ExcelReader()
+        public ExcelReader(string filePath, System.IO.FileAccess accessible = FileAccess.Read)
         {
-            _xlApp = new Microsoft.Office.Interop.Excel.Application();
-            _xlApp.Visible = false;
-            _xlApp.ScreenUpdating = false;
-            _xlApp.DisplayAlerts = false;
+            _stream = new FileStream(filePath, FileMode.Open, accessible, FileShare.ReadWrite);
+            _workbook = new XLWorkbook(_stream);
+            _worksheet = _workbook.Worksheet(1);
         }
         ~ExcelReader()
         {
-            try
-            {
-                _workBook.Close(false);
-                Marshal.ReleaseComObject(_workBook);
-            }
-            catch { }
-            try
-            {
-                _xlApp.Visible = true;
-                _xlApp.ScreenUpdating = true;
-                _xlApp.DisplayAlerts = true;
-                _xlApp.Quit();
-                Marshal.ReleaseComObject(_xlApp);
-            }
-            catch { }
-            GC.Collect();
+            
         }
 
-        public void loadWorkBook(string xlFile)
+        public void Delete()
         {
-            try
-            {
-                _xlPath = xlFile;
-                _workBook = _xlApp.Workbooks.Open(xlFile, true);
-            }
-            catch (Exception ex)
-            {
-                //throw new Exception(ex.Message);
-            }
+            _stream.Close();
+            _worksheet = null;
+            _workbook.Dispose();
+            _workbook = null;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
         }
+        public void selectSheet(string name)
+        {
+            _worksheet = _workbook.Worksheet(name);
+        }
+
+        public void saveWorkBook(bool saveOptions = true)
+        {
+            _workbook.Save(saveOptions);
+        }
+
+        public int maxRow()
+        {
+            int maxRow = 1;
+            if (_worksheet != null)
+            {
+                while (_worksheet.Cell(maxRow, 1).GetValue<string>() != "" && _worksheet.Cell(maxRow, 1).GetValue<string>() != null)
+                {
+                    maxRow++;
+                }
+            }
+            return maxRow;
+        }
+
+        public void writeCellData(int row, int col, string value)
+        {
+            _worksheet.Cell(row, col).Value = value;
+        }
+
+        public void writeCellColor(int row, int col, System.Drawing.Color color)
+        {
+            _worksheet.Cell(row, col).Style.Fill.SetBackgroundColor(XLColor.FromColor(color) );
+        }
+
+        public void writeHyperLink(int row, int col, string link)
+        {
+            _worksheet.Cell(row, col).SetHyperlink(new XLHyperlink(link));
+        }
+
         public Dictionary<string, Codes> getTableByRange(string sheetName, string range)
         {
             Dictionary<string, Codes> codeReports = new Dictionary<string, Codes>();
-            List<string> types = new List<string> { "ER", "ESR", "RR" };
-            List<string> webTypes = new List<string> { "IAPMO UES ER", "ICC-ES ESR", "LADBS RR" };
-            Worksheet sheet = _workBook.Sheets[sheetName];//.Worksheets[sheetName];
-            Range targetRange = sheet.Range[range];
+            _worksheet = _workbook.Worksheet(sheetName);
+            IXLCells firstCell = _worksheet.Search("Code Report No", CompareOptions.OrdinalIgnoreCase);
+            IXLAddress firstCellAdd = firstCell.First().Address;
+            int minRow = firstCell.First().Address.RowNumber + 1;
+            int maxRow = _worksheet.RangeUsed().RowCount();
+            int minCol = firstCell.First().Address.ColumnNumber;
+            int maxCol = firstCell.First().Address.ColumnNumber + 7;
+
+            List<string> webTypes = new List<string> { "IAPMO UES ER", "ICC-ES ESR"};
             string webType = "";
-            foreach (Range row in targetRange.Rows)
+
+            for (int i = minRow; i < maxRow; i++)
             {
-                string ID = targetRange.Cells[row.Row, 1].Text;
-                if (targetRange.Cells[row.Row, 0].Text == "")
+                string ID = _worksheet.Cell(i, minCol).GetValue<string>();
+                if ((ID.Contains("ER")|| ID.Contains("ESR")) && (webType == "IAPMO UES ER" || webType == "ICC-ES ESR"))
                 {
-                    for (int i = 0; i < row.Columns.Count; i++)
+                    Codes code = new Codes();
+                    code.Number = ID.Trim();
+                    code.Link = _worksheet.Cell(i, minCol).GetHyperlink().ExternalAddress?.ToString();
+                    code.ProductCategory = _worksheet.Cell(i, minCol + 1).GetValue<string>();
+                    code.Description = _worksheet.Cell(i, minCol+2).GetValue<string>();
+                    code.ProductsListed = _worksheet.Cell(i, minCol + 3).GetValue<string>();
+                    code.LatestCode = _worksheet.Cell(i, minCol + 4).GetValue<string>();
+                    try { code.IssueDate = _worksheet.Cell(i, minCol + 5).GetValue<DateTime>().ToString("MMM-yyyy"); }
+                    catch { code.IssueDate = "n/a"; }
+                    try { code.ExpirationDate = _worksheet.Cell(i, minCol + 6).GetValue<DateTime>().ToString("MMM-yyyy"); }
+                    catch { code.ExpirationDate = "n/a"; }
+                    code.WebType = webType;
+                    codeReports[ID.Trim() + "-" + webType] = code;
+                }
+                for (int check = 1; check < maxCol; check++)
+                {
+                    string val = _worksheet.Cell(i, check).GetValue<string>();
+                    if (webTypes.Any(val.Contains) && val != null)
                     {
-                        string val = targetRange.Cells[row.Row, i + 1].Text.Trim();
-                        webTypes.Any(x => val.Contains(x));
-                        if (webTypes.Contains(val) && val != null)
+                        webType = val.Trim();
+                        break;
+                    }
+                }
+            }
+            return codeReports;
+        }
+        public Dictionary<string, Codes> getCodeDatas(string sheetName, string trackText)
+        {
+            Dictionary<string, Codes> codeReports = new Dictionary<string, Codes>();
+            _worksheet = _workbook.Worksheet(sheetName);
+            IXLCells firstCell = _worksheet.Search(trackText, CompareOptions.OrdinalIgnoreCase);
+            if (firstCell.Count()>0)
+            {
+                IXLAddress firstCellAdd = firstCell.First().Address;
+                int minRow = firstCell.First().Address.RowNumber + 1;
+                int maxRow = _worksheet.RangeUsed().RowCount();
+                int minCol = firstCell.First().Address.ColumnNumber;
+                int maxCol = firstCell.First().Address.ColumnNumber + 7;
+
+                List<string> webTypes = new List<string> { "IAPMO UES ER", "ICC-ES ESR" };
+                string webType = "";
+
+                for (int i = minRow; i < maxRow; i++)
+                {
+                    string ID = _worksheet.Cell(i, minCol).GetValue<string>();
+                    if ((ID.Contains("ER") || ID.Contains("ESR")) && (webType == "IAPMO UES ER" || webType == "ICC-ES ESR"))
+                    {
+                        Codes code = new Codes();
+                        code.Number = ID.Trim();
+                        code.Link = _worksheet.Cell(i, minCol).GetHyperlink().ExternalAddress?.ToString();
+                        code.ProductCategory = _worksheet.Cell(i, minCol + 1).GetValue<string>();
+                        code.Description = _worksheet.Cell(i, minCol + 2).GetValue<string>();
+                        code.ProductsListed = _worksheet.Cell(i, minCol + 3).GetValue<string>();
+                        code.LatestCode = _worksheet.Cell(i, minCol + 4).GetValue<string>();
+                        try { code.IssueDate = _worksheet.Cell(i, minCol + 5).GetValue<DateTime>().ToString("MMM-yyyy"); }
+                        catch { code.IssueDate = "n/a"; }
+                        try { code.ExpirationDate = _worksheet.Cell(i, minCol + 6).GetValue<DateTime>().ToString("MMM-yyyy"); }
+                        catch { code.ExpirationDate = "n/a"; }
+                        code.WebType = webType;
+                        codeReports[ID.Trim() + "_" + webType] = code;
+                    }
+                    for (int check = minCol; check < maxCol; check++)
+                    {
+                        string val = _worksheet.Cell(i, check)?.GetValue<string>();
+                        if (webTypes.Any(val.Contains) && val != null)
                         {
                             webType = val.Trim();
                             break;
                         }
                     }
                 }
-                if (types.Any(w => ID.Contains(w))) //(Enum.IsDefined(typeof(Types), ID))
-                {
-                    Codes code = new Codes();
-                    code.Number = ID.Trim();
-                    foreach (var link in targetRange.Cells[row.Row, 1].Hyperlinks)
-                    {
-                        code.Link = link.Address;
-                    }
-                    code.ProductCategory = targetRange.Cells[row.Row, 2].Text.Trim();
-                    code.Description = targetRange.Cells[row.Row, 3].Text.Trim();
-                    code.ProductsListed = targetRange.Cells[row.Row, 4].Text.Trim();
-                    code.LatestCode = targetRange.Cells[row.Row, 5].Text.Trim();
-                    code.IssueDate = targetRange.Cells[row.Row, 6].Text.Trim();
-                    code.ExpirationDate = targetRange.Cells[row.Row, 7].Text.Trim();
-                    code.WebType = webType;
-                    codeReports[ID.Trim()+"-"+ webType] = code;
-                }
-                Marshal.ReleaseComObject(row);
             }
             return codeReports;
-        }
-
-        public void setTableByRange(string binPath)
-        {
-            Dictionary<string, Codes> codeReports = IOData.ReadFromBinaryFile<Dictionary<string, Codes>>(binPath);
-            foreach (var code in codeReports)
-            {
-                Console.WriteLine(code.Value.Link);
-            }
         }
     }
 }
