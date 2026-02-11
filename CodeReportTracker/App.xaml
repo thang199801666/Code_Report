@@ -1,0 +1,16 @@
+﻿<Application x:Class="CodeReportTracker.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- Fluent.Ribbon styles required so designer/runtime resolve RibbonWindow and Fluent controls -->
+                <ResourceDictionary Source="pack://application:,,,/Fluent;component/Themes/Generic.xaml" />
+
+                <!-- Application theme -->
+                <ResourceDictionary Source="pack://application:,,,/WinUx.Styles;component/Themes/Generic.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

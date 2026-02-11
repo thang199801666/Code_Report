@@ -1,0 +1,166 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Resources\Abaqus.png" />
+    <None Remove="Resources\CheckLink.png" />
+    <None Remove="Resources\Check_File.png" />
+    <None Remove="Resources\Clear.png" />
+    <None Remove="Resources\CommandWindow.png" />
+    <None Remove="Resources\Connect.png" />
+    <None Remove="Resources\Copy.png" />
+    <None Remove="Resources\Cut.png" />
+    <None Remove="Resources\DeleteDocument.png" />
+    <None Remove="Resources\Details.png" />
+    <None Remove="Resources\Download.png" />
+    <None Remove="Resources\DownloadPdf.png" />
+    <None Remove="Resources\Edit.png" />
+    <None Remove="Resources\EditImage.png" />
+    <None Remove="Resources\Error.png" />
+    <None Remove="Resources\Excel.png" />
+    <None Remove="Resources\Execute.png" />
+    <None Remove="Resources\Exit.png" />
+    <None Remove="Resources\File.png" />
+    <None Remove="Resources\Fit.png" />
+    <None Remove="Resources\Flash.png" />
+    <None Remove="Resources\Folder.png" />
+    <None Remove="Resources\Generate.png" />
+    <None Remove="Resources\Help.png" />
+    <None Remove="Resources\Hidden.png" />
+    <None Remove="Resources\Home.png" />
+    <None Remove="Resources\Image.png" />
+    <None Remove="Resources\Information.png" />
+    <None Remove="Resources\InformationMark.png" />
+    <None Remove="Resources\InputFile.png" />
+    <None Remove="Resources\JobViewer.png" />
+    <None Remove="Resources\Left_Arrow.png" />
+    <None Remove="Resources\List.png" />
+    <None Remove="Resources\Login.png" />
+    <None Remove="Resources\Message.png" />
+    <None Remove="Resources\New.png" />
+    <None Remove="Resources\None.png" />
+    <None Remove="Resources\Odb_File.png" />
+    <None Remove="Resources\OpenFile.png" />
+    <None Remove="Resources\Open_Folder.png" />
+    <None Remove="Resources\Options.png" />
+    <None Remove="Resources\Paste.png" />
+    <None Remove="Resources\PDF.png" />
+    <None Remove="Resources\PlotDigitizer.png" />
+    <None Remove="Resources\Print.png" />
+    <None Remove="Resources\Probe.png" />
+    <None Remove="Resources\Question.png" />
+    <None Remove="Resources\QuestionMark.png" />
+    <None Remove="Resources\Refresh.png" />
+    <None Remove="Resources\Rename.png" />
+    <None Remove="Resources\Report_Tracker.png" />
+    <None Remove="Resources\Right_Arrow.png" />
+    <None Remove="Resources\Save.png" />
+    <None Remove="Resources\SaveAs.png" />
+    <None Remove="Resources\Search.png" />
+    <None Remove="Resources\Settings.png" />
+    <None Remove="Resources\Show.png" />
+    <None Remove="Resources\Sort.png" />
+    <None Remove="Resources\Stamp.png" />
+    <None Remove="Resources\Stop.png" />
+    <None Remove="Resources\Success.png" />
+    <None Remove="Resources\Transfer.png" />
+    <None Remove="Resources\Update.png" />
+    <None Remove="Resources\Upload.png" />
+    <None Remove="Resources\Views.png" />
+    <None Remove="Resources\Warning.png" />
+    <None Remove="Resources\WebSearch.png" />
+    <None Remove="Resources\WinUx.ico" />
+    <None Remove="Resources\WinUx.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\Abaqus.png" />
+    <Resource Include="Resources\CheckLink.png" />
+    <Resource Include="Resources\Clear.png" />
+    <Resource Include="Resources\CommandWindow.png" />
+    <Resource Include="Resources\DeleteDocument.png" />
+    <Resource Include="Resources\DownloadPdf.png" />
+    <Resource Include="Resources\Edit.png" />
+    <Resource Include="Resources\EditImage.png" />
+    <Resource Include="Resources\Excel.png" />
+    <Resource Include="Resources\Fit.png" />
+    <Resource Include="Resources\Flash.png" />
+    <Resource Include="Resources\Generate.png" />
+    <Resource Include="Resources\Help.png" />
+    <Resource Include="Resources\Image.png" />
+    <Resource Include="Resources\InformationMark.png" />
+    <Resource Include="Resources\InputFile.png" />
+    <Resource Include="Resources\JobViewer.png" />
+    <Resource Include="Resources\Login.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\Connect.png" />
+    <Resource Include="Resources\Copy.png" />
+    <Resource Include="Resources\Check_File.png" />
+    <Resource Include="Resources\Cut.png">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="Resources\Delete.png" />
+    <Resource Include="Resources\Details.png" />
+    <Resource Include="Resources\Download.png" />
+    <Resource Include="Resources\Error.png" />
+    <Resource Include="Resources\Execute.png" />
+    <Resource Include="Resources\Exit.png" />
+    <Resource Include="Resources\File.png" />
+    <Resource Include="Resources\Folder.png" />
+    <Resource Include="Resources\Hidden.png" />
+    <Resource Include="Resources\Home.png" />
+    <Resource Include="Resources\Information.png" />
+    <Resource Include="Resources\Left_Arrow.png" />
+    <Resource Include="Resources\List.png" />
+    <Resource Include="Resources\Message.png" />
+    <Resource Include="Resources\New.png" />
+    <Resource Include="Resources\None.png" />
+    <Resource Include="Resources\Odb_File.png" />
+    <Resource Include="Resources\OpenFile.png" />
+    <Resource Include="Resources\Open_Folder.png" />
+    <Resource Include="Resources\Options.png" />
+    <Resource Include="Resources\Paste.png" />
+    <Resource Include="Resources\PDF.png" />
+    <Resource Include="Resources\PlotDigitizer.png" />
+    <Resource Include="Resources\Print.png" />
+    <Resource Include="Resources\Probe.png" />
+    <Resource Include="Resources\Question.png" />
+    <Resource Include="Resources\QuestionMark.png" />
+    <Resource Include="Resources\Refresh.png" />
+    <Resource Include="Resources\Rename.png" />
+    <Resource Include="Resources\Report_Tracker.png" />
+    <Resource Include="Resources\Right_Arrow.png" />
+    <Resource Include="Resources\Save.png" />
+    <Resource Include="Resources\SaveAs.png" />
+    <Resource Include="Resources\Search.png" />
+    <Resource Include="Resources\Settings.png" />
+    <Resource Include="Resources\Show.png" />
+    <Resource Include="Resources\Sort.png" />
+    <Resource Include="Resources\Stamp.png" />
+    <Resource Include="Resources\Stop.png" />
+    <Resource Include="Resources\Success.png" />
+    <Resource Include="Resources\Transfer.png" />
+    <Resource Include="Resources\Update.png" />
+    <Resource Include="Resources\UpdateByLocal.png" />
+    <Resource Include="Resources\Upload.png" />
+    <Resource Include="Resources\Views.png" />
+    <Resource Include="Resources\Warning.png" />
+    <Resource Include="Resources\WebSearch.png" />
+    <Resource Include="Resources\WinUx.ico" />
+    <Resource Include="Resources\WinUx.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+  </ItemGroup>
+
+</Project>

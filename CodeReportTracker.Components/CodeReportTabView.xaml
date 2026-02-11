@@ -1,0 +1,249 @@
+﻿<UserControl x:Class="CodeReportTracker.Components.CodeReportTabView"
+             x:ClassModifier="public"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:cmp="clr-namespace:CodeReportTracker.Components"
+             xmlns:vm="clr-namespace:CodeReportTracker.Components.ViewModels"
+             xmlns:local="clr-namespace:CodeReportTracker.Components"
+             mc:Ignorable="d"
+             MinWidth="300"
+             MinHeight="200"
+             Width="NaN"
+             Height="NaN">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/WinUx.Styles;component/Themes/Generic.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Chrome-like color palette -->
+            <SolidColorBrush x:Key="ChromeTabBackground" Color="#FFF5F6F7"/>
+            <SolidColorBrush x:Key="ChromeTabInactive" Color="#FFE6E8EA"/>
+            <SolidColorBrush x:Key="ChromeTabHover" Color="#FFDDE3E8"/>
+            <SolidColorBrush x:Key="ChromeTabActive" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ChromeAccent" Color="#FF2E8DEF"/>
+            <SolidColorBrush x:Key="ChromeBorder" Color="#FFBFC7CD"/>
+
+            <!-- Header template -->
+            <DataTemplate x:Key="DefaultHeaderTemplate">
+                <Grid VerticalAlignment="Center" MinWidth="60">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0" VerticalAlignment="Center" Margin="6,0,4,0">
+                        <TextBlock x:Name="tbHeaderText"
+                                   Text="{Binding Header}"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left"
+                                   FontSize="13"
+                                   Foreground="Black"
+                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap"
+                                   IsHitTestVisible="False"
+                                   FontWeight="Normal"
+                                   FontStyle="Normal" />
+
+                        <TextBox x:Name="tbHeaderEdit"
+                                 Visibility="Collapsed"
+                                 VerticalAlignment="Center"
+                                 HorizontalAlignment="Stretch"
+                                 MinWidth="60"
+                                 Padding="2"
+                                 Text="{Binding Header, Mode=TwoWay, UpdateSourceTrigger=Explicit}"
+                                 KeyDown="HeaderEdit_KeyDown" />
+                    </Grid>
+
+                    <Button Grid.Column="1"
+                            Style="{StaticResource HeaderCloseButtonStyle}"
+                            Content="✕"
+                            VerticalAlignment="Center"
+                            Margin="0,0,1,0"
+                            ToolTip="Close tab"
+                            Click="CloseButton_Click"/>
+                </Grid>
+
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                        <Setter TargetName="tbHeaderText" Property="Visibility" Value="Collapsed" />
+                        <Setter TargetName="tbHeaderEdit" Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+
+                    <!-- When the containing TabItem is selected, make the header bold italic -->
+                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TabItem}}" Value="True">
+                        <Setter TargetName="tbHeaderText" Property="FontWeight" Value="Bold" />
+                        <Setter TargetName="tbHeaderText" Property="FontStyle" Value="Italic" />
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!-- Per-tab content template (fallback only) -->
+            <DataTemplate x:Key="TabViewModelContentTemplate" DataType="{x:Type vm:TabViewModel}">
+                <Grid>
+                    <ContentPresenter x:Name="PART_TabContentPresenter"
+                                      Content="{Binding Content}"
+                                      Visibility="Visible" />
+
+                    <cmp:CodeReportTable x:Name="PART_FallbackTable"
+                                         ItemsSource="{Binding Items}"
+                                         SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                                         DataContext="{Binding}"
+                                         Visibility="Collapsed" />
+                </Grid>
+
+                <DataTemplate.Triggers>
+                    <DataTrigger Binding="{Binding Content}" Value="{x:Null}">
+                        <Setter TargetName="PART_TabContentPresenter" Property="Visibility" Value="Collapsed"/>
+                        <Setter TargetName="PART_FallbackTable" Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                </DataTemplate.Triggers>
+            </DataTemplate>
+
+            <!-- TabItem style -->
+            <Style x:Key="ChromeTabItemStyle" TargetType="TabItem">
+                <Setter Property="AllowDrop" Value="True"/>
+                <EventSetter Event="PreviewMouseLeftButtonDown" Handler="TabItem_PreviewMouseLeftButtonDown"/>
+                <EventSetter Event="MouseMove" Handler="TabItem_MouseMove"/>
+                <EventSetter Event="DragOver" Handler="TabItem_DragOver"/>
+                <EventSetter Event="Drop" Handler="TabItem_Drop"/>
+
+                <Setter Property="Margin" Value="0,0,-6,0"/>
+                <Setter Property="Padding" Value="2,2"/>
+                <Setter Property="MinWidth" Value="60"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TabItem">
+                            <Grid>
+                                <Border x:Name="Bd"
+                                        Background="{StaticResource ChromeTabInactive}"
+                                        BorderBrush="{StaticResource ChromeBorder}"
+                                        BorderThickness="1,1,1,0"
+                                        CornerRadius="6,6,0,0"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter x:Name="ContentSite"
+                                                      VerticalAlignment="Center"
+                                                      HorizontalAlignment="Stretch"
+                                                      ContentSource="Header"/>
+                                </Border>
+                            </Grid>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource ChromeTabActive}"/>
+                                    <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource ChromeAccent}"/>
+                                    <Setter TargetName="Bd" Property="Panel.ZIndex" Value="1"/>
+                                    <Setter Property="Margin" Value="0,0,-6,0"/>
+                                </Trigger>
+
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="{StaticResource ChromeTabHover}"/>
+                                </Trigger>
+
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.6"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Add-button style -->
+            <Style x:Key="ChromeAddButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="24"/>
+                <Setter Property="Height" Value="20"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Foreground" Value="#FF444444"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#20FFFFFF"/>
+                                    <Setter Property="Foreground" Value="{StaticResource ChromeAccent}"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter Property="Background" Value="#30FFFFFF"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- TabControl style: use standard ContentPresenter (TabControl manages selected content) -->
+            <Style x:Key="TabControlWithAddStyle" TargetType="TabControl">
+                <Setter Property="ItemsPanel">
+                    <Setter.Value>
+                        <ItemsPanelTemplate>
+                            <TabPanel IsItemsHost="True" Margin="0"/>
+                        </ItemsPanelTemplate>
+                    </Setter.Value>
+                </Setter>
+
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TabControl">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition/>
+                                </Grid.RowDefinitions>
+
+                                <DockPanel Grid.Row="0" LastChildFill="False"
+                                           Margin="6,1,0,1" 
+                                           HorizontalAlignment="Left">
+                                    <ItemsPresenter x:Name="HeaderPresenter" DockPanel.Dock="Left" />
+                                    <Button x:Name="PART_AddButton"
+                                            Click="AddButton_Click"
+                                            Style="{StaticResource ChromeAddButtonStyle}"
+                                            DockPanel.Dock="Right"
+                                            FontSize="14"
+                                            FontWeight="Bold"
+                                            Margin="1,1,1,1"
+                                            ToolTip="New tab"
+                                            Command="{Binding AddCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=UserControl}}" Height="24">+</Button>
+                                </DockPanel>
+
+                                <Border Grid.Row="1"
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="0,6,6,6"
+                                        Margin="2,2,2,2">
+                                    <!-- Default TabControl behavior: single ContentPresenter for SelectedContent -->
+                                    <ContentPresenter ContentSource="SelectedContent" Margin="{TemplateBinding Padding}" />
+                                </Border>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+
+                <Setter Property="ItemTemplate" Value="{StaticResource DefaultHeaderTemplate}" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid>
+        <TabControl x:Name="PART_TabControl"
+                    Style="{StaticResource TabControlWithAddStyle}"
+                    ItemsSource="{Binding EffectiveItems, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                    ItemTemplate="{Binding HeaderTemplate, RelativeSource={RelativeSource AncestorType=UserControl}, TargetNullValue={StaticResource DefaultHeaderTemplate}}"
+                    Background="{StaticResource ChromeTabBackground}">
+            <TabControl.ItemContainerStyle>
+                <Style TargetType="TabItem" BasedOn="{StaticResource ChromeTabItemStyle}">
+                    <Setter Property="ContentTemplate" Value="{StaticResource TabViewModelContentTemplate}" />
+                </Style>
+            </TabControl.ItemContainerStyle>
+        </TabControl>
+    </Grid>
+</UserControl>

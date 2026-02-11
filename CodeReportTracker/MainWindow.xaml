@@ -1,0 +1,826 @@
+﻿<fluent:RibbonWindow xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+                     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                     xmlns:local="clr-namespace:CodeReportTracker"
+                     xmlns:components="clr-namespace:CodeReportTracker.Components;assembly=CodeReportTracker.Components"
+                     xmlns:converters="clr-namespace:CodeReportTracker.Converters;assembly=CodeReportTracker"
+                     xmlns:fluent="clr-namespace:Fluent;assembly=Fluent"
+                     x:Class="CodeReportTracker.MainWindow"
+                     mc:Ignorable="d"
+                     Title="Code Report Tracker"
+                     Loaded="Window_Loaded"
+                     Icon="pack://application:,,,/WinUx.Styles;component/Resources/Report_Tracker.png"
+                     Closing="Window_Closing"
+                     Background="{DynamicResource WindowBackgroundBrush}">
+
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/WinUx.Styles;component/Themes/Generic.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Console style: black background, monospace font, non-wrapping with scrollbars -->
+            <Style x:Key="ConsoleTextBoxStyle" TargetType="TextBox">
+                <Setter Property="FontFamily" Value="Consolas"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="Background" Value="Black"/>
+                <Setter Property="Foreground" Value="LightGreen"/>
+                <Setter Property="Padding" Value="6"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="CaretBrush" Value="LightGreen"/>
+                <Setter Property="TextWrapping" Value="NoWrap"/>
+                <Setter Property="AcceptsReturn" Value="True"/>
+                <Setter Property="AcceptsTab" Value="True"/>
+                <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="IsReadOnly" Value="True"/>
+                <Setter Property="SnapsToDevicePixels" Value="True"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- Ribbon -->
+        <fluent:Ribbon DockPanel.Dock="Top">
+            <fluent:Ribbon.Tabs>
+                <fluent:RibbonTabItem Header="Home">
+                    <fluent:RibbonGroupBox Header="File">
+                        <StackPanel Orientation="Horizontal">
+                            <fluent:Button x:Name="btnOpen"
+                                           Header="Open"
+                                           Margin="2"
+                                           Width="56"
+                                           Click="btnOpen_Click"
+                                           ToolTipService.InitialShowDelay="500"
+                                           ToolTipService.ShowDuration="20000"
+                                           ToolTipService.BetweenShowDelay="1000">
+
+                                <fluent:Button.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/OpenFile.png" Margin="1"/>
+                                </fluent:Button.Icon>
+
+                                <fluent:Button.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/OpenFile.png"
+                                                   Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Open File"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Search your computer or local network for a file and open it for editing."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"
+                                                           SnapsToDevicePixels="True"/>
+                                                    <TextBlock FontStyle="Italic"
+                                                               FontSize="11"
+                                                               Foreground="#777"
+                                                               VerticalAlignment="Center"
+                                                               Text="Press F1 for more help"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:Button.ToolTip>
+                            </fluent:Button>
+
+                            <!-- Combined Save / Save As split button -->
+                            <fluent:SplitButton x:Name="btnSaveSplit"
+                                               Header="Save"
+                                               Margin="2"
+                                               Width="56"
+                                               Click="btnSave_Click"
+                                               ToolTipService.InitialShowDelay="500"
+                                               ToolTipService.ShowDuration="12000">
+                                <fluent:SplitButton.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Save.png" Margin="1"/>
+                                </fluent:SplitButton.Icon>
+
+                                <fluent:SplitButton.Items>
+                                    <MenuItem Header="Save" Click="btnSave_Click" StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Save.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Save.png"
+                                                           Width="44" Height="44" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Save"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Save changes to the currently open file."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                                   Width="14"
+                                                                   Height="14"
+                                                                   Stretch="Uniform"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                            <TextBlock FontStyle="Italic"
+                                                                       FontSize="11"
+                                                                       Foreground="#777"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="Press F1 for more help"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+                                    <MenuItem Header="Save As" Click="btnSaveAs_Click" StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/SaveAs.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/SaveAs.png"
+                                                           Width="44" Height="44" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Save As"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Save the current document to a new file path."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                                   Width="14"
+                                                                   Height="14"
+                                                                   Stretch="Uniform"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                            <TextBlock FontStyle="Italic"
+                                                                       FontSize="11"
+                                                                       Foreground="#777"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="Press F1 for more help"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+                                </fluent:SplitButton.Items>
+
+                                <fluent:SplitButton.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Save.png"
+                                                   Width="44" Height="44" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Save"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Save changes to the currently open file. Use the dropdown to select Save As."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                    <TextBlock FontStyle="Italic"
+                                                               FontSize="11"
+                                                               Foreground="#777"
+                                                               VerticalAlignment="Center"
+                                                               Text="Press F1 for more help"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:SplitButton.ToolTip>
+                            </fluent:SplitButton>
+
+                            <fluent:Button x:Name="btnExport"
+                                           Header="Export"
+                                           Margin="2"
+                                           Click="btnExport_Click"
+                                           Width="56"
+                                           ToolTipService.InitialShowDelay="500"
+                                           ToolTipService.ShowDuration="12000">
+                                <fluent:Button.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Excel.png" Margin="1"/>
+                                </fluent:Button.Icon>
+
+                                <fluent:Button.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Excel.png"
+                                                   Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Export"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Export data to Excel for external analysis."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                    <TextBlock FontStyle="Italic"
+                                                               FontSize="11"
+                                                               Foreground="#777"
+                                                               VerticalAlignment="Center"
+                                                               Text="Press F1 for more help"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:Button.ToolTip>
+                            </fluent:Button>
+                        </StackPanel>
+                    </fluent:RibbonGroupBox>
+
+                    <fluent:RibbonGroupBox Header="Actions">
+                        <StackPanel Orientation="Horizontal">
+                            <fluent:SplitButton x:Name="btnCheck"
+                                               Header="Check"
+                                               Margin="2"
+                                               Click="btnCheckLink_Click"
+                                               Width="56"
+                                               ToolTipService.InitialShowDelay="400"
+                                               ToolTipService.ShowDuration="10000">
+                                <fluent:SplitButton.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/CheckLink.png" Margin="1"/>
+                                </fluent:SplitButton.Icon>
+
+                                <fluent:SplitButton.Items>
+                                    <MenuItem Header="Check" 
+                                              Click="btnCheckLink_Click" 
+                                              StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/CheckLink.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/CheckLink.png"
+                                                           Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Check"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Validate the current PDF link."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/InformationMark.png"
+                                                                   Width="14"
+                                                                   Height="14"
+                                                                   Stretch="Uniform"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                            <TextBlock FontStyle="Italic"
+                                                                       FontSize="11"
+                                                                       Foreground="#777"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="Requires network; see Console for progress"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+
+                                    <MenuItem Header="Web Check" 
+                                              Click="btWebCheck_Click" 
+                                              StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/WebSearch.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/WebSearch.png"
+                                                           Width="40" 
+                                                           Height="40" 
+                                                           Margin="0,0,8,0" 
+                                                           SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Web Check"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="(Disable now)Perform a remote/web validation of the PDF link by inputting the code for checking on each website."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/InformationMark.png"
+                                                                   Width="14"
+                                                                   Height="14"
+                                                                   Stretch="Uniform"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                            <TextBlock FontStyle="Italic"
+                                                                       FontSize="11"
+                                                                       Foreground="#777"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="Requires network; see Console for progress"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+                                </fluent:SplitButton.Items>
+
+                                <fluent:SplitButton.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/CheckLink.png"
+                                                   Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Check"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Validate the current PDF link or document."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                    <TextBlock FontStyle="Italic"
+                                                               FontSize="11"
+                                                               Foreground="#777"
+                                                               VerticalAlignment="Center"
+                                                               Text="Press F1 for more help"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:SplitButton.ToolTip>
+                            </fluent:SplitButton>
+
+                            <fluent:SplitButton x:Name="btnUpdateSplit"
+                                                   Header="Update"
+                                                   Margin="2"
+                                                   Click="btnUpdate_Click"
+                                                   Width="72"
+                                                   ToolTipService.InitialShowDelay="400"
+                                                   ToolTipService.ShowDuration="10000">
+                                <fluent:SplitButton.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Update.png" Margin="1"/>
+                                </fluent:SplitButton.Icon>
+
+                                <fluent:SplitButton.Items>
+                                    <MenuItem Header="Update by URL" Click="btnUpdate_Click" StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Update.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Update.png"
+                                                           Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Update by URL"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Fetch PDFs from configured web links and parse the first page to update code data."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/InformationMark.png"
+                                                                   Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                                            <TextBlock FontStyle="Italic" 
+                                                                       FontSize="11" 
+                                                                       Foreground="#777" 
+                                                                       VerticalAlignment="Center"
+                                                                       Text="Requires network connection"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+
+                                    <MenuItem Header="Update from Local PDFs" Click="btnUpdateLocal_Click" StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/UpdateByLocal.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/UpdateByLocal.png"
+                                                           Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Update from Local PDFs"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Read PDFs from the local folder 'Pdf Files\\{TabName}' and parse their first pages to update code data."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"
+                                                                   TextAlignment="Left"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/InformationMark.png"
+                                                                   Width="14" 
+                                                                   Height="14" 
+                                                                   Stretch="Uniform" 
+                                                                   VerticalAlignment="Top" 
+                                                                   Margin="0,2,6,0"/>
+                                                            <TextBlock FontStyle="Italic" 
+                                                                       FontSize="11" 
+                                                                       Foreground="#777" 
+                                                                       VerticalAlignment="Top"
+                                                                       TextWrapping="Wrap"
+                                                                       MaxWidth="260"
+                                                                       Text="No network required; ensure PDFs are placed in the Pdf Files folder for the current tab"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+                                </fluent:SplitButton.Items>
+
+                                <fluent:SplitButton.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Update.png"
+                                                   Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Update Code"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Update code data. Default action uses the configured URLs. Use the dropdown to update from local PDF files instead."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:SplitButton.ToolTip>
+                            </fluent:SplitButton>
+
+                            <fluent:SplitButton x:Name="btnDownloadSplit"
+                                               Header="Download"
+                                               Margin="2"
+                                               Click="btnDownload_Click"
+                                               Width="72"
+                                               ToolTipService.InitialShowDelay="400"
+                                               ToolTipService.ShowDuration="10000">
+                                <fluent:SplitButton.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/DownloadPdf.png" Margin="1"/>
+                                </fluent:SplitButton.Icon>
+
+                                <fluent:SplitButton.Items>
+                                    <MenuItem Header="Download" Click="btnDownload_Click" StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/DownloadPdf.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/DownloadPdf.png"
+                                                           Width="44" Height="44" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Download PDFs"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Download PDFs for rows in the selected tab using each item's link. Files are saved to 'Pdf Files\\{TabName}'."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/InformationMark.png"
+                                                                   Width="14"
+                                                                   Height="14"
+                                                                   Stretch="Uniform"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,6,0"/>
+                                                            <TextBlock FontStyle="Italic"
+                                                                       FontSize="11"
+                                                                       Foreground="#777"
+                                                                       VerticalAlignment="Center"
+                                                                       Text="Requires network; progress and errors are written to the Console"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+                                    <MenuItem Header="Delete PDFs" Click="btnDeletePdfs_Click" StaysOpenOnClick="False">
+                                        <MenuItem.Icon>
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/DeleteDocument.png" Width="16" Height="16"/>
+                                        </MenuItem.Icon>
+                                        <MenuItem.ToolTip>
+                                            <ToolTip>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/DeleteDocument.png"
+                                                           Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                                    <StackPanel>
+                                                        <TextBlock Text="Delete PDFs"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   Margin="0,0,0,6"/>
+                                                        <TextBlock Text="Remove all PDF files saved for the currently selected tab (Pdf Files\\{TabName}). This action cannot be undone."
+                                                                   TextWrapping="Wrap"
+                                                                   Foreground="#666"
+                                                                   LineHeight="16"
+                                                                   Margin="0,0,0,8"
+                                                                   MaxWidth="320"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </MenuItem.ToolTip>
+                                    </MenuItem>
+                                </fluent:SplitButton.Items>
+
+                                <fluent:SplitButton.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/DownloadPdf.png"
+                                                   Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Download PDFs"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Download PDFs for rows in the selected tab using each item's link. Use the dropdown to delete existing saved PDFs for the current tab."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/InformationMark.png"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                    <TextBlock FontStyle="Italic"
+                                                               FontSize="11"
+                                                               Foreground="#777"
+                                                               VerticalAlignment="Center"
+                                                               Text="PDF files are automatically saved to the default folder"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:SplitButton.ToolTip>
+                            </fluent:SplitButton>
+
+                            <fluent:Button x:Name="btnStop"
+                                           Header="Stop"
+                                           Margin="2"
+                                           Click="btnStop_Click"
+                                           Width="56"
+                                           ToolTipService.InitialShowDelay="400"
+                                           ToolTipService.ShowDuration="8000">
+                                <fluent:Button.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Stop.png" Margin="1"/>
+                                </fluent:Button.Icon>
+
+                                <fluent:Button.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Horizontal" Margin="4">
+                                            <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Stop.png"
+                                                   Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                            <StackPanel>
+                                                <TextBlock Text="Stop"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold"
+                                                           Margin="0,0,0,6"/>
+                                                <TextBlock Text="Stop the currently running operation."
+                                                           TextWrapping="Wrap"
+                                                           Foreground="#666"
+                                                           LineHeight="16"
+                                                           Margin="0,0,0,8"
+                                                           MaxWidth="320"/>
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                           Width="14"
+                                                           Height="14"
+                                                           Stretch="Uniform"
+                                                           VerticalAlignment="Center"
+                                                           Margin="0,0,6,0"/>
+                                                    <TextBlock FontStyle="Italic"
+                                                               FontSize="11"
+                                                               Foreground="#777"
+                                                               VerticalAlignment="Center"
+                                                               Text="Press F1 for more help"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:Button.ToolTip>
+                            </fluent:Button>
+                        </StackPanel>
+                    </fluent:RibbonGroupBox>
+
+                    <fluent:RibbonGroupBox Header="Settings">
+                        <fluent:Button x:Name="btnSettings"
+                                       Header="Settings"
+                                       Margin="2"
+                                       Click="btnSettings_Click"
+                                       Width="56"
+                                       ToolTipService.InitialShowDelay="500"
+                                       ToolTipService.ShowDuration="15000">
+                            <fluent:Button.Icon>
+                                <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Settings.png" 
+                                       Margin="0,1,-1,-1"/>
+                            </fluent:Button.Icon>
+
+                            <fluent:Button.ToolTip>
+                                <ToolTip>
+                                    <StackPanel Orientation="Horizontal" Margin="4">
+                                        <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Settings.png"
+                                               Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                        <StackPanel>
+                                            <TextBlock Text="Settings"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,6"/>
+                                            <TextBlock Text="Open application settings and preferences."
+                                                       TextWrapping="Wrap"
+                                                       Foreground="#666"
+                                                       LineHeight="16"
+                                                       Margin="0,0,0,8"
+                                                       MaxWidth="320"/>
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/QuestionMark.png"
+                                                       Width="14"
+                                                       Height="14"
+                                                       Stretch="Uniform"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,6,0"/>
+                                                <TextBlock FontStyle="Italic"
+                                                           FontSize="11"
+                                                           Foreground="#777"
+                                                           VerticalAlignment="Center"
+                                                           Text="Press F1 for more help"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ToolTip>
+                            </fluent:Button.ToolTip>
+                        </fluent:Button>
+                    </fluent:RibbonGroupBox>
+
+                </fluent:RibbonTabItem>
+
+                <fluent:RibbonTabItem Header="Help">
+                    <fluent:RibbonGroupBox Header="Help">
+                        <fluent:Button x:Name="btnHelp"
+                                       Header="Help"
+                                       Margin="2"
+                                       Click="btnHelp_Click"
+                                       Width="48"
+                                       ToolTipService.InitialShowDelay="500"
+                                       ToolTipService.ShowDuration="15000">
+                            <fluent:Button.Icon>
+                                <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Help.png" 
+                                       Margin="0,1,-1,-1"/>
+                            </fluent:Button.Icon>
+                            <fluent:Button.ToolTip>
+                                <ToolTip>
+                                    <StackPanel Orientation="Horizontal" Margin="4">
+                                        <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Help.png"
+                                               Width="40" Height="40" Margin="0,0,8,0" SnapsToDevicePixels="True"/>
+                                        <StackPanel>
+                                            <TextBlock Text="Help"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,6"/>
+                                            <TextBlock Text="Open the help documentation and support resources."
+                                                       TextWrapping="Wrap"
+                                                       Foreground="#666"
+                                                       LineHeight="16"
+                                                       Margin="0,0,0,8"
+                                                       MaxWidth="320"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </ToolTip>
+                            </fluent:Button.ToolTip>
+                        </fluent:Button>
+                    </fluent:RibbonGroupBox>
+                </fluent:RibbonTabItem>
+            </fluent:Ribbon.Tabs>
+        </fluent:Ribbon>
+
+        <!-- Main area -->
+        <Grid Margin="6" x:Name="MainGrid">
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition Height="6"/>
+                <RowDefinition x:Name="ConsoleRow" Height="120"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="{StaticResource ControlBackgroundBrush}"
+                    CornerRadius="6"
+                    Padding="4"
+                    Margin="0,0,0,2"
+                    Effect="{StaticResource ShadowEffect}">
+                <components:CodeReportTabView
+                            x:Name="MainTabView"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ItemsSource="{Binding Tabs}"
+                            SelectedItem="{Binding SelectedTab, Mode=TwoWay}"
+                            CloseCommand="{Binding CloseTabCommand}"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"/>
+            </Border>
+
+            <GridSplitter Grid.Row="1" 
+                          Height="6" 
+                          HorizontalAlignment="Stretch" 
+                          VerticalAlignment="Center" 
+                          ShowsPreview="True" 
+                          Background="White"/>
+
+            <Expander Grid.Row="2"
+                      x:Name="expConsole"
+                      Header="Console"
+                      IsExpanded="True"
+                      Background="#FF2E4368"
+                      Foreground="White"
+                      Padding="4"
+                      Margin="0,2,0,0"
+                      Collapsed="ConsoleExpander_Collapsed"
+                      Expanded="ConsoleExpander_Expanded">
+                <TextBox x:Name="tbConsole"
+                         ToolTip="Console output"
+                         Style="{StaticResource ConsoleTextBoxStyle}"
+                         Text="{Binding ConsoleText, Mode=OneWay}"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         IsReadOnly="True"
+                         TextChanged="Console_TextChanged"/>
+            </Expander>
+        </Grid>
+    </DockPanel>
+</fluent:RibbonWindow>

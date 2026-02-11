@@ -1,0 +1,86 @@
+﻿<UserControl x:Class="WinUx.Controls.Dial"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             mc:Ignorable="d" 
+             d:DesignHeight="120" d:DesignWidth="120">
+    <Grid>
+        <Viewbox Stretch="Uniform">
+            <Grid Width="120" Height="120">
+                <!-- Outer Circle (Background) -->
+                <Ellipse x:Name="OuterCircle"
+                         Width="120" 
+                         Height="120"
+                         Stroke="#CCC"
+                         StrokeThickness="2"
+                         Fill="#F5F5F5"/>
+
+                <!-- Notch Marks -->
+                <Canvas x:Name="NotchCanvas" 
+                        Width="120" 
+                        Height="120"
+                        IsHitTestVisible="False">
+                    <!-- Notches will be added programmatically -->
+                </Canvas>
+
+                <!-- Value Arc (Progress Indicator) -->
+                <Canvas Width="120" Height="120" IsHitTestVisible="False">
+                    <Path x:Name="ValueArc"
+                          Stroke="#4CAF50"
+                          StrokeThickness="4"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Data="M 60,10 A 50,50 0 0 1 60,10"/>
+                </Canvas>
+
+                <!-- Inner Circle (Knob Area) -->
+                <Ellipse x:Name="InnerCircle"
+                         Width="80" 
+                         Height="80"
+                         Stroke="#999"
+                         StrokeThickness="1"
+                         Fill="White"
+                         MouseLeftButtonDown="Dial_MouseDown"
+                         MouseMove="Dial_MouseMove"
+                         MouseLeftButtonUp="Dial_MouseUp"
+                         MouseLeave="Dial_MouseLeave"
+                         Cursor="Hand"/>
+
+                <!-- Knob Indicator (Pointer) -->
+                <Line x:Name="KnobIndicator"
+                      X1="60" Y1="60"
+                      X2="60" Y2="25"
+                      Stroke="#333"
+                      StrokeThickness="3"
+                      StrokeStartLineCap="Round"
+                      StrokeEndLineCap="Round"
+                      IsHitTestVisible="False">
+                    <Line.RenderTransform>
+                        <RotateTransform x:Name="KnobRotation" 
+                                        CenterX="60" 
+                                        CenterY="60" 
+                                        Angle="0"/>
+                    </Line.RenderTransform>
+                </Line>
+
+                <!-- Center Dot -->
+                <Ellipse Width="8" 
+                         Height="8"
+                         Fill="#555"
+                         IsHitTestVisible="False"/>
+
+                <!-- Value Text Display -->
+                <TextBlock x:Name="ValueText"
+                          Text="0"
+                          FontSize="16"
+                          FontWeight="SemiBold"
+                          Foreground="#333"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Margin="0,30,0,0"
+                          IsHitTestVisible="False"/>
+            </Grid>
+        </Viewbox>
+    </Grid>
+</UserControl>

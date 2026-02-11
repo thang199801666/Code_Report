@@ -1,0 +1,99 @@
+﻿<Window x:Class="WinUx.Controls.WinUxMessageBox"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MessageBox"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        WindowStyle="ToolWindow"
+        ShowInTaskbar="False"
+        SizeToContent="WidthAndHeight"
+        MinWidth="300" MinHeight="150"
+        Loaded="Window_Loaded"
+        PreviewKeyDown="Window_PreviewKeyDown">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/WinUx.Styles;component/Themes/Generic.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Bind ViewModel bools to Visibility -->
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Border Background="{StaticResource ControlBackgroundBrush}" Padding="10" CornerRadius="10">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="46"/>
+                    <ColumnDefinition/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Icon (use pack URIs provided by MessageBoxHelper via ViewModel.IconUri) -->
+                <Viewbox Width="40" Height="40" VerticalAlignment="Top" Margin="0,4,0,0" Grid.Column="0">
+                    <Image Source="{Binding IconUri}" Width="40" Height="40" Stretch="Uniform"/>
+                </Viewbox>
+
+                <!-- Message -->
+                <TextBlock x:Name="PART_Message"
+                           Grid.Column="1"
+                           TextWrapping="Wrap"
+                           FontSize="14"
+                           Padding="4"
+                           MaxWidth="600"
+                           VerticalAlignment="Top"
+                           Text="{Binding MessageText}"/>
+            </Grid>
+
+            <!-- Buttons -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Grid.Row="1" Margin="10,8,0,0">
+                <Button x:Name="BtnOK"
+                        Content="{Binding OkButtonText}"
+                        Style="{DynamicResource FirstModernButton}"
+                        Width="60"
+                        Margin="6,0,0,0"
+                        Visibility="{Binding ShowOkButton, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding OkCommand}"
+                        IsDefault="{Binding ShowOkButton}"/>
+
+                <Button x:Name="BtnYesToAll"
+                        Content="{Binding YesToAllButtonText}"
+                        Style="{DynamicResource FirstModernButton}"
+                        Width="90"
+                        Margin="6,0,0,0"
+                        Visibility="{Binding ShowYesToAllButton, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding YesToAllCommand}"/>
+
+                <Button x:Name="BtnYes"
+                        Content="{Binding YesButtonText}"
+                        Style="{DynamicResource FirstModernButton}"
+                        Width="60"
+                        Margin="6,0,0,0"
+                        Visibility="{Binding ShowYesButton, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding YesCommand}"/>
+
+                <Button x:Name="BtnNo"
+                        Content="{Binding NoButtonText}"
+                        Style="{DynamicResource FirstModernButton}"
+                        Width="60"
+                        Margin="6,0,0,0"
+                        Visibility="{Binding ShowNoButton, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding NoCommand}"/>
+
+                <Button x:Name="BtnCancel"
+                        Content="{Binding CancelButtonText}"
+                        Style="{DynamicResource FirstModernButton}"
+                        Width="60"
+                        Margin="6,0,0,0"
+                        Visibility="{Binding ShowCancelButton, Converter={StaticResource BoolToVis}}"
+                        Command="{Binding CancelCommand}"
+                        IsCancel="{Binding ShowCancelButton}"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

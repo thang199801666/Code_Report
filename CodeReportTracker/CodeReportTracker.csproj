@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>CodeReportTracker</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>Application.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Application.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Costura.Fody" Version="6.0.0">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Fluent.Ribbon" Version="11.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CodeReportTracker.Components\CodeReportTracker.Components.csproj" />
+    <ProjectReference Include="..\CodeReportTracker.Core\CodeReportTracker.Core.csproj" />
+    <ProjectReference Include="..\ExcelControls\ExcelControls.csproj" />
+    <ProjectReference Include="..\PDFControls\PDFControls.csproj" />
+    <ProjectReference Include="..\WinUx.Styles\WinUx.Styles.csproj" />
+  </ItemGroup>
+
+</Project>

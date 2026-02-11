@@ -1,0 +1,508 @@
+﻿<UserControl x:Class="CodeReportTracker.Components.CodeReportTable"
+             x:ClassModifier="public"
+             x:Name="Root"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:local="clr-namespace:CodeReportTracker.Components"
+             xmlns:conv="clr-namespace:CodeReportTracker.Components.Converters"
+             mc:Ignorable="d"
+             Loaded="UserControl_Loaded"
+             Focusable="True"
+             Width="NaN" 
+             Height="NaN">
+
+    <UserControl.CommandBindings>
+        <!-- Allow Ctrl+V / ApplicationCommands.Paste to work even when DataGrid cell is focused -->
+        <CommandBinding Command="ApplicationCommands.Paste"
+                        Executed="PasteCommand_Executed"
+                        CanExecute="PasteCommand_CanExecute" />
+    </UserControl.CommandBindings>
+
+    <UserControl.InputBindings>
+        <!-- Provide a key binding so Ctrl+V invokes the paste command at the control level -->
+        <KeyBinding Command="ApplicationCommands.Paste" Gesture="Ctrl+V" />
+    </UserControl.InputBindings>
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <conv:ValuesToColorConverter x:Key="ColorConverter" />
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- MVVM-friendly bindings: ItemsSource and SelectedItem are provided by the control's DPs -->
+        <DataGrid x:Name="dgMain"
+                  x:FieldModifier="public"
+                  ColumnWidth="*"
+                  RowHeaderWidth="NaN"
+                  CanUserReorderColumns="False"
+                  AutoGenerateColumns="False"
+                  CanUserAddRows="True"
+                  CanUserSortColumns="False"
+                  LoadingRow="DataGrid_LoadingRow"
+                  ColumnHeaderStyle="{DynamicResource ColumnHeaderStyle}"
+                  ItemsSource="{Binding ItemsSource, ElementName=Root}"
+                  SelectedItem="{Binding SelectedItem, ElementName=Root, Mode=TwoWay}"
+                  PreviewKeyDown="DataGrid_PreviewKeyDown"
+                  Focusable="True"
+                  RowHeight="22"
+                  MinRowHeight="22"
+                  CanUserResizeRows="False"
+                  EnableRowVirtualization="True"
+                  IsReadOnly="False">
+
+            <!-- Ensure the Paste command is available when focus is inside the DataGrid (cells, editors, etc.) -->
+            <DataGrid.CommandBindings>
+                <CommandBinding Command="ApplicationCommands.Paste"
+                                Executed="PasteCommand_Executed"
+                                CanExecute="PasteCommand_CanExecute"/>
+            </DataGrid.CommandBindings>
+
+            <DataGrid.InputBindings>
+                <KeyBinding Command="ApplicationCommands.Paste" Gesture="Ctrl+V"/>
+            </DataGrid.InputBindings>
+
+            <DataGrid.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Import Data">
+                    </MenuItem>
+                    <MenuItem Header="Paste" Click="PasteMenu_Click">
+                    </MenuItem>
+
+                    <!-- Columns submenu: populated at runtime so it's available even when headers are hidden -->
+                    <Separator />
+                    <MenuItem Header="Columns" x:Name="miColumns">
+                        <!-- Items generated in code-behind when context menu opens -->
+                    </MenuItem>
+                </ContextMenu>
+            </DataGrid.ContextMenu>
+
+            <DataGrid.Resources>
+                <!-- Prevent row/cell text wrapping: apply to all TextBlocks inside the DataGrid -->
+                <Style TargetType="{x:Type TextBlock}">
+                    <Setter Property="TextWrapping" Value="NoWrap" />
+                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Setter Property="Background" Value="White" />
+                    <Setter Property="FontSize" Value="11" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0" />
+                </Style>
+
+                <!-- remove Hyperlink event bubbling to code-behind; hyperlink command binding handled per-row in template -->
+                <Style TargetType="{x:Type CheckBox}">
+                    <Setter Property="Background" Value="White" />
+                    <Setter Property="BorderBrush" Value="Black"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type CheckBox}">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Stretch">
+                                    <!-- smaller check square so it fits into 22px row -->
+                                    <Border BorderBrush="{TemplateBinding BorderBrush}" Background="{TemplateBinding Background}" BorderThickness="{TemplateBinding BorderThickness}" Width="12" Height="12">
+                                        <Grid>
+                                            <Grid Background="{TemplateBinding Foreground}" Margin="1" Visibility="Collapsed" Name="nullBlock"/>
+                                            <Path Stretch="Uniform" Width="12" Height="8" Fill="{TemplateBinding Foreground}" Name="eliCheck" Data="F1 M 9.97498,1.22334L 4.6983,9.09834L 4.52164,9.09834L 0,5.19331L 1.27664,3.52165L 4.255,6.08833L 8.33331,1.52588e-005L 9.97498,1.22334 Z " Visibility="Collapsed"/>
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock Margin="4,0,0,0"  VerticalAlignment="Center" Foreground="Black" Text="{TemplateBinding Content}"></TextBlock>
+                                </StackPanel>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="LightGray" />
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter Property="Background" Value="#FF9C9E9F" />
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Background" Value="LightGray" />
+                                        <Setter Property="Foreground" Value="Gray" />
+                                        <Setter Property="BorderBrush" Value="Gray"/>
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="eliCheck" Property="Visibility" Value="Visible"></Setter>
+                                        <Setter Property="Background" Value="LightGreen"></Setter>
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="False">
+                                        <Setter Property="Background" Value="#FF0000"></Setter>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <Style x:Key="ColumnHeaderStyle" TargetType="{x:Type DataGridColumnHeader}">
+                    <Setter Property="ContentTemplate">
+                        <Setter.Value>
+                            <DataTemplate>
+                                <TextBlock HorizontalAlignment="Stretch"
+                                           VerticalAlignment="Stretch"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           Text="{Binding}" />
+                            </DataTemplate>
+                        </Setter.Value>
+                    </Setter>
+                    <Setter Property="ToolTip" Value="{Binding}" />
+                    <Setter Property="HorizontalContentAlignment" Value="Center" />
+                    <!-- header-level right-click still available -->
+                    <EventSetter Event="MouseRightButtonUp" Handler="ColumnHeader_MouseRightButtonUp"/>
+                </Style>
+
+                <Style x:Key="DataGridContentCellCentering" TargetType="{x:Type DataGridCell}">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="{x:Type DataGridCell}">
+                                <Grid Background="{TemplateBinding Background}">
+                                    <ContentPresenter VerticalAlignment="Center" Margin="0"/>
+                                    <ContentPresenter HorizontalAlignment="Center" Margin="0" />
+                                </Grid>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+
+                <Style TargetType="{x:Type DataGridRow}">
+                    <Setter Property="Height" Value="22"/>
+                    <Setter Property="MinHeight" Value="22"/>
+                    <!-- EventSetter must appear before Style.Triggers to satisfy XAML content model -->
+                    <EventSetter Event="MouseDoubleClick" Handler="RowDoubleClick"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#FF84AEF3" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+
+            </DataGrid.Resources>
+
+            <DataGrid.Columns>
+                <!-- Use a template column to bind the Hyperlink to the per-row OpenLinkCommand (MVVM).
+                     Cell tooltip now presents both the Link and the LastCheck without an icon. -->
+                <DataGridTemplateColumn Header="Code Report No" Width="60" >
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis">
+                                <Hyperlink Command="{Binding OpenLinkCommand}" NavigateUri="{Binding Link}">
+                                    <Run Text="{Binding Number}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                    <DataGridTemplateColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Background" Value="White"/>
+                            <Setter Property="ToolTip">
+                                <Setter.Value>
+                                    <ToolTip>
+                                        <StackPanel Orientation="Vertical" Margin="4">
+                                            <!-- first item: Link -->
+                                            <TextBlock Text="{Binding Link}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,6"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="Black"
+                                                       MaxWidth="320"/>
+                                            <!-- second item: LastCheck -->
+                                            <TextBlock Text="{Binding LastCheck, StringFormat='Last Check : {0}'}"
+                                                       Foreground="#666"
+                                                       FontSize="11"
+                                                       TextWrapping="NoWrap"/>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </Setter.Value>
+                            </Setter>
+
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CodeExists}" Value="True">
+                                    <Setter Property="Background" Value="LightGreen"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding CodeExists}" Value="False">
+                                    <Setter Property="Background" Value="LightCoral"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </DataGridTemplateColumn.CellStyle>
+                </DataGridTemplateColumn>
+
+                <!-- Added: Product Category -->
+                <DataGridTextColumn Header="Product Category" Width="120" Binding="{Binding ProductCategory}" IsReadOnly="False">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextWrapping" Value="NoWrap" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding ProductCategory}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="TextWrapping" Value="NoWrap"/>
+                            <Setter Property="AcceptsReturn" Value="False"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="0" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+
+                <!-- Added: Description -->
+                <DataGridTextColumn Header="Description" Width="2*" Binding="{Binding Description}" IsReadOnly="False">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextWrapping" Value="NoWrap" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip" Value="{Binding Description}" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="TextWrapping" Value="NoWrap"/>
+                            <Setter Property="AcceptsReturn" Value="False"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="0" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+
+                <!-- Added: Products Listed -->
+                <DataGridTextColumn Header="Products Listed" 
+                                    Width="100"
+                                    Binding="{Binding ProductsListed}" 
+                                    IsReadOnly="False">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="TextBlock.TextAlignment" Value="Center" />
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Center" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextWrapping" Value="NoWrap" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="TextAlignment" Value="Center" />
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="TextWrapping" Value="NoWrap"/>
+                            <Setter Property="AcceptsReturn" Value="False"/>
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="0" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Latest Code"
+                                    Width="100" 
+                                    Binding="{Binding LatestCode}" 
+                                    IsReadOnly="False">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <MultiBinding Converter="{StaticResource ColorConverter}">
+                                        <Binding Path="LatestCode_Old" />
+                                        <Binding Path="LatestCode" />
+                                    </MultiBinding>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Center" />
+                            <Setter Property="VerticalAlignment" Value="Center"/>
+                            <Setter Property="TextWrapping" Value="NoWrap" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="ToolTip">
+                                <Setter.Value>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="Old Data  : {0} &#10;New Data : {1}">
+                                                <Binding Path="LatestCode_Old" />
+                                                <Binding Path="LatestCode" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="TextWrapping" Value="NoWrap"/>
+                            <Setter Property="AcceptsReturn" Value="False"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="0" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Issue/Rev Date" 
+                                    Width="100" 
+                                    Binding="{Binding IssueDate}" 
+                                    IsReadOnly="False">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="TextBlock.TextAlignment" Value="Right" />
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <MultiBinding Converter="{StaticResource ColorConverter}">
+                                        <Binding Path="IssueDate_Old" />
+                                        <Binding Path="IssueDate" />
+                                    </MultiBinding>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextWrapping" Value="NoWrap" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="TextAlignment" Value="Right" />
+                            <Setter Property="Margin" Value="0,0,4,0" />
+                            <Setter Property="ToolTip">
+                                <Setter.Value>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="Old Data  : {0} &#10;New Data : {1}">
+                                                <Binding Path="IssueDate_Old" />
+                                                <Binding Path="IssueDate" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="HorizontalContentAlignment" Value="Right" />
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="TextWrapping" Value="NoWrap"/>
+                            <Setter Property="AcceptsReturn" Value="False"/>
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="0,0,4,0" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTextColumn Header="Expiration Date" 
+                                    Width="100"
+                                    Binding="{Binding ExpirationDate}" 
+                                    IsReadOnly="False">
+                    <DataGridTextColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="TextBlock.TextAlignment" Value="Right" />
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <MultiBinding Converter="{StaticResource ColorConverter}">
+                                        <Binding Path="ExpirationDate_Old" />
+                                        <Binding Path="ExpirationDate" />
+                                    </MultiBinding>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTextColumn.CellStyle>
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                            <Setter Property="TextWrapping" Value="NoWrap" />
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                            <Setter Property="TextAlignment" Value="Right" />
+                            <Setter Property="Margin" Value="0,0,4,0" />
+                            <Setter Property="ToolTip">
+                                <Setter.Value>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="Old Data  : {0} &#10;New Data : {1}">
+                                                <Binding Path="ExpirationDate_Old" />
+                                                <Binding Path="ExpirationDate" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                    <DataGridTextColumn.EditingElementStyle>
+                        <Style TargetType="TextBox">
+                            <Setter Property="HorizontalContentAlignment" Value="Right" />
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="TextWrapping" Value="NoWrap"/>
+                            <Setter Property="AcceptsReturn" Value="False"/>
+                            <Setter Property="FontSize" Value="11" />
+                            <Setter Property="Padding" Value="0,0,4,0" />
+                        </Style>
+                    </DataGridTextColumn.EditingElementStyle>
+                </DataGridTextColumn>
+
+                <DataGridTemplateColumn Header="Download Process" Width="120" IsReadOnly="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <!-- smaller progress bar to fit the fixed row height -->
+                                <ProgressBar Minimum="0" 
+                                             Maximum="100" 
+                                             Margin="2,0,2,0"
+                                             Value="{Binding DownloadProcess}" 
+                                             Height="18" 
+                                             VerticalAlignment="Center" />
+                                <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center" Text="{Binding DownloadProcess, StringFormat='{}{0}%'}" TextWrapping="NoWrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                    <!-- LastCheck tooltip removed as requested -->
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Status" Width="150" IsReadOnly="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <StackPanel Orientation="Horizontal">
+                                    <CheckBox Content="Checked" 
+                                              Margin="1,0,6,0" 
+                                              IsChecked="{Binding HasCheck, Mode=TwoWay}" 
+                                              VerticalAlignment="Center"
+                                              IsHitTestVisible="False"
+                                              Focusable="False"/>
+                                    <CheckBox Content="Updated" 
+                                              Margin="0,0,0,0" 
+                                              IsChecked="{Binding HasUpdate, Mode=TwoWay}" 
+                                              VerticalAlignment="Center"
+                                              IsHitTestVisible="False"
+                                              Focusable="False"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+
+                    <DataGridTemplateColumn.CellStyle>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="ToolTip">
+                                <Setter.Value>
+                                    <ToolTip Content="Is Check: Check by searching web. &#x0a;Is Update: Check by comparing with new code."/>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </DataGridTemplateColumn.CellStyle>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>
