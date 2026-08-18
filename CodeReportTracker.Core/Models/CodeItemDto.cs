@@ -10,6 +10,7 @@ namespace CodeReportTracker.Core.Models
         public string ProductCategory { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
         public string ProductsListed { get; set; } = string.Empty;
+        public string ProductsListed_Old { get; set; } = string.Empty;
         public string LatestCode { get; set; } = string.Empty;
         public string LatestCode_Old { get; set; } = string.Empty;
         public string IssueDate { get; set; } = string.Empty;
@@ -32,6 +33,7 @@ namespace CodeReportTracker.Core.Models
                 ProductCategory = ci.ProductCategory ?? string.Empty,
                 Description = ci.Description ?? string.Empty,
                 ProductsListed = ci.ProductsListed ?? string.Empty,
+                ProductsListed_Old = ci.ProductsListed_Old ?? string.Empty,
                 LatestCode = ci.LatestCode ?? string.Empty,
                 LatestCode_Old = ci.LatestCode_Old ?? string.Empty,
                 IssueDate = ci.IssueDate ?? string.Empty,
@@ -54,6 +56,7 @@ namespace CodeReportTracker.Core.Models
             ci.ProductCategory = this.ProductCategory ?? string.Empty;
             ci.Description = this.Description ?? string.Empty;
             ci.ProductsListed = this.ProductsListed ?? string.Empty;
+            ci.ProductsListed_Old = this.ProductsListed_Old ?? string.Empty;
             ci.LatestCode = this.LatestCode ?? string.Empty;
             ci.LatestCode_Old = this.LatestCode_Old ?? string.Empty;
             ci.IssueDate = this.IssueDate ?? string.Empty;

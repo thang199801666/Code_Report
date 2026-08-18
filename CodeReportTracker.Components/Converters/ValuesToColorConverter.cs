@@ -10,9 +10,14 @@ namespace CodeReportTracker.Components.Converters
     {
         public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
         {
-            var s1 = values?.Length > 0 ? values[0] as string : null;
-            var s2 = values?.Length > 1 ? values[1] as string : null;
-            return string.Equals(s1, s2, StringComparison.Ordinal) ? Brushes.Transparent : Brushes.Orange;
+            if (values == null || values.Length < 3 || values[2] is not bool hasCheck || !hasCheck)
+                return Brushes.White;
+
+            var oldValue = values[0]?.ToString()?.Trim() ?? string.Empty;
+            var newValue = values[1]?.ToString()?.Trim() ?? string.Empty;
+            var hasUpdate = !string.Equals(oldValue, newValue, StringComparison.OrdinalIgnoreCase);
+
+            return hasUpdate ? Brushes.Orange : Brushes.White;
         }
 
         public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)

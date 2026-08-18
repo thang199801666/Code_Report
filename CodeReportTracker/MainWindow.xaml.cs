@@ -18,8 +18,10 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Navigation;
@@ -53,6 +55,7 @@ namespace CodeReportTracker
             _suppressExpanderEvents = false;
             _vm = CreateViewModel();
             DataContext = _vm;
+            _vm.ConsoleLineAdded += OnConsoleLineAdded;
 
             // Remove this line - don't load settings here
             // LoadAndApplyWindowSettings();
@@ -92,7 +95,7 @@ namespace CodeReportTracker
                     _tokenSource?.Cancel();
                     PrintCommand("Cancel");
                 },
-                selectExcelAction: () => SelectExcelFile(this, null),
+                selectExcelAction: () => ImportExcelFile(this, null),
                 exportAction: async () => await Task.Run(() => Dispatcher.Invoke(() => btnExport_Click(this, new RoutedEventArgs())))
             );
         }
@@ -333,6 +336,7 @@ namespace CodeReportTracker
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             tbConsole.AppendText("**************Initialize**************\n");
+            ScrollConsoleToEnd(force: true);
 
             // Log settings status after console is ready
             try
@@ -374,7 +378,61 @@ namespace CodeReportTracker
 
         private void Console_TextChanged(object sender, TextChangedEventArgs e)
         {
-            ((WpfControls.TextBox)sender).ScrollToEnd();
+            ScrollConsoleToEnd();
+        }
+
+        private void tbConsole_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            var scroller = FindVisualChild<ScrollViewer>(tbConsole);
+            if (scroller == null) return;
+
+            var lines = -Math.Sign(e.Delta) * 3;
+            for (var i = 0; i < Math.Abs(lines); i++)
+            {
+                if (lines > 0) scroller.LineDown();
+                else scroller.LineUp();
+            }
+            e.Handled = true;
+        }
+
+        private bool IsConsoleAtBottom()
+        {
+            var scroller = FindVisualChild<ScrollViewer>(tbConsole);
+            return scroller == null || scroller.VerticalOffset >= scroller.ScrollableHeight - 1;
+        }
+
+        private void ScrollConsoleToEnd(bool force = false)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var scroller = FindVisualChild<ScrollViewer>(tbConsole);
+                if (scroller == null) return;
+
+                // Only auto-scroll when already at the bottom so the user can scroll up freely.
+                if (force || scroller.VerticalOffset >= scroller.ScrollableHeight - 1)
+                    scroller.ScrollToEnd();
+            }), DispatcherPriority.Loaded);
+        }
+
+        private void OnConsoleLineAdded(MainWindowViewModel.ConsoleLine line)
+        {
+            var shouldFollowTail = IsConsoleAtBottom();
+
+            var brush = line.Level switch
+            {
+                MainWindowViewModel.ConsoleLevel.Success => Brushes.LightGreen,
+                MainWindowViewModel.ConsoleLevel.Warning => Brushes.Orange,
+                MainWindowViewModel.ConsoleLevel.Error => Brushes.Red,
+                _ => Brushes.White
+            };
+
+            var paragraph = new Paragraph(new Run(line.Text))
+            {
+                Foreground = brush,
+                Margin = new Thickness(0)
+            };
+            tbConsole.Document.Blocks.Add(paragraph);
+            ScrollConsoleToEnd(shouldFollowTail);
         }
 
         private void ConsoleExpander_Collapsed(object sender, RoutedEventArgs e)
@@ -409,29 +467,137 @@ namespace CodeReportTracker
 
         #region UI Operations
 
-        private void SelectExcelFile(object sender, RoutedEventArgs e)
+        private void ImportExcelFile(object sender, RoutedEventArgs e)
         {
             var fileDialog = new OpenFileDialog
             {
                 Filter = "Excel File (*.xlsx)|*.xlsx",
-                Title = "Select Excel File",
+                Title = "Import Excel File",
                 Multiselect = false
             };
 
             if (fileDialog.ShowDialog() == true)
             {
-                PrintCommand("Import Excel File: " + fileDialog.FileName);
-                MarkModified();
+                try
+                {
+                    var (imported, tables) = ImportWorkbookIntoTables(fileDialog.FileName);
+                    PrintCommand($"Imported {imported} row(s) into {tables} table(s) from Excel: {fileDialog.FileName}");
+                    if (imported > 0)
+                        MarkModified();
+                }
+                catch (Exception ex)
+                {
+                    PrintCommand($"Failed to import Excel file: {ex.Message}");
+                    WinUxMessageBox.Show(
+                        $"Failed to import Excel file:\n{ex.Message}",
+                        "Import Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
             }
+        }
+
+        private (int imported, int tables) ImportWorkbookIntoTables(string filePath)
+        {
+            var headerNames = new[]
+            {
+                "Code Report No", "Code Report Number", "Report No", "Number",
+                "Product Category", "Description", "Products Listed",
+                "Latest Code", "Issue/Rev Date", "Issue Date", "Expiration Date"
+            };
+            var sheets = new ExcelControls.ExcelController().ReadRowsByHeadersPerWorksheet(filePath, headerNames);
+            var imported = 0;
+            var tables = 0;
+
+            foreach (var sheet in sheets)
+            {
+                var tab = new TabViewModel(GetUniqueTabHeader(sheet.Key));
+                foreach (var row in sheet.Value)
+                {
+                    var number = GetImportedValue(row, "Code Report No", "Code Report Number", "Report No", "Number");
+                    if (!IsImportableCodeReportNumber(number))
+                        continue;
+
+                    var item = new CodeItem
+                    {
+                        Number = number,
+                        Link = GetImportedValue(row, "Link", "URL", "Report Link"),
+                        WebType = GetImportedValue(row, "Web Type", "Type"),
+                        ProductCategory = GetImportedValue(row, "Product Category", "Category"),
+                        Description = GetImportedValue(row, "Description"),
+                        ProductsListed = GetImportedValue(row, "Products Listed", "# Products Listed", "Products"),
+                        LatestCode = GetImportedValue(row, "Latest Code", "LatestCode"),
+                        IssueDate = GetImportedValue(row, "Issue/Rev Date", "Issue Date", "Issue/Rev", "Revised Date"),
+                        ExpirationDate = GetImportedValue(row, "Expiration Date", "Expiration", "Valid Through", "Active Through"),
+                        CodeExists = true
+                    };
+
+                    item.LatestCode_Old = item.LatestCode;
+                    item.IssueDate_Old = item.IssueDate;
+                    item.ExpirationDate_Old = item.ExpirationDate;
+                    tab.Items.Add(item);
+                    imported++;
+                }
+
+                if (tab.Items.Count == 0)
+                    continue;
+
+                tab.InitializePdfFolder(AppContext.BaseDirectory);
+                _vm.Tabs.Add(tab);
+                tables++;
+            }
+
+            if (imported == 0)
+                throw new InvalidDataException("No matching header row or data was found in the workbook.");
+
+            _vm.SelectedTab = _vm.Tabs.LastOrDefault();
+            return (imported, tables);
+        }
+
+        private string GetUniqueTabHeader(string sourceHeader)
+        {
+            var baseHeader = string.IsNullOrWhiteSpace(sourceHeader) ? "Imported" : sourceHeader.Trim();
+            var header = baseHeader;
+            var suffix = 2;
+            while (_vm.Tabs.Any(tab => string.Equals(tab.Header, header, StringComparison.OrdinalIgnoreCase)))
+                header = $"{baseHeader} ({suffix++})";
+
+            return header;
+        }
+
+        private static string GetImportedValue(Dictionary<string, string> row, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var match = row.FirstOrDefault(pair => NormalizeImportedHeader(pair.Key) == NormalizeImportedHeader(name));
+                if (!string.IsNullOrWhiteSpace(match.Value))
+                    return match.Value;
+            }
+
+            return string.Empty;
+        }
+
+        private static string NormalizeImportedHeader(string value)
+        {
+            return new string((value ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        }
+
+        private static bool IsImportableCodeReportNumber(string value)
+        {
+            return Regex.IsMatch(
+                value?.Trim() ?? string.Empty,
+                @"^(?:ER|ESR|TER)\s*-?\s*\d+[A-Z]?$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         }
 
         private void PrintCommand(string input)
         {
+            // Single source of truth: route through the throttled ViewModel console so the
+            // bound TextBox is updated once per flush instead of also appending directly here.
             var output = $"-[{DateTime.Now:hh:mm:ss MM-dd-yyyy}] : {input}\n";
 
             void Write()
             {
-                tbConsole.AppendText(output);
                 _vm?.AppendConsole(output.TrimEnd('\n'));
             }
 
@@ -448,6 +614,7 @@ namespace CodeReportTracker
                 btnUpdateSplit.IsEnabled = enabled;
                 btnExport.IsEnabled = enabled;
                 btnOpen.IsEnabled = enabled;
+                btnImport.IsEnabled = enabled;
                 btnSaveSplit.IsEnabled = enabled;
                 btnStop.IsEnabled = !enabled;
                 btnDownloadSplit.IsEnabled = enabled;
@@ -520,12 +687,6 @@ namespace CodeReportTracker
                 SetRibbonButtons(true);
                 CloseSplitDropDown(btnUpdateSplit);
             }
-        }
-
-        private async void btWebCheck_Click(object sender, RoutedEventArgs e)
-        {
-            _tokenSource = new CancellationTokenSource();
-            
         }
 
         private async void btnUpdate_Click(object sender, RoutedEventArgs e)

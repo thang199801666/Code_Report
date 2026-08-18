@@ -19,6 +19,7 @@ namespace PDFControls
             public string IssueDate { get; set; }
             public string ExpirationDate { get; set; }
             public string RawText { get; set; }
+            public int? ProductsCount { get; set; }
 
             public PdfCodeInfo()
             {
@@ -51,7 +52,7 @@ namespace PDFControls
         /// <summary>
         /// Parse first-page text using IAPMO-style heuristics.
         /// </summary>
-        public static PdfCodeInfo ParseIapmo(string firstPageText)
+        public static PdfCodeInfo ParseIapmo(string firstPageText, IEnumerable<string>? latestCodeContexts = null, IEnumerable<string>? issueDateContexts = null, IEnumerable<string>? expirationDateContexts = null)
         {
             var info = new PdfCodeInfo();
             if (string.IsNullOrEmpty(firstPageText))
@@ -79,6 +80,9 @@ namespace PDFControls
                     info.LatestCode = val;
             }
 
+            if (string.Equals(info.LatestCode, "n/a", StringComparison.OrdinalIgnoreCase))
+                info.LatestCode = FindFourDigitValueAfterContexts(firstPageText, latestCodeContexts) ?? info.LatestCode;
+
             // Parse dates
             DateTime issueDate = DateTime.MinValue;
             DateTime revisedDate = DateTime.MinValue;
@@ -95,15 +99,15 @@ namespace PDFControls
             }
 
             // Try to find expiration/renewal/valid date more robustly
-            var expirationKeywords = new[]
-            {
-                "renewal", "renewal date", "renew", "valid through", "valid thru", "valid until", "valid", "expiration", "expires", "expiration date"
-            };
+            var expirationKeywords = (expirationDateContexts ?? Array.Empty<string>()).ToArray();
             DateTime found;
             if (TryFindDateAfterKeywords(firstPageText, expirationKeywords, out found))
             {
                 expirationDate = found;
             }
+
+            if (TryFindDateAfterKeywords(firstPageText, issueDateContexts?.ToArray() ?? Array.Empty<string>(), out found))
+                issueDate = found;
 
             if (revisedDate > issueDate) issueDate = revisedDate;
 
@@ -116,7 +120,7 @@ namespace PDFControls
         /// <summary>
         /// Parse first-page text using ICC-ES-style heuristics.
         /// </summary>
-        public static PdfCodeInfo ParseIccEs(string firstPageText)
+        public static PdfCodeInfo ParseIccEs(string firstPageText, IEnumerable<string>? latestCodeContexts = null, IEnumerable<string>? issueDateContexts = null, IEnumerable<string>? expirationDateContexts = null)
         {
             var info = new PdfCodeInfo();
             if (string.IsNullOrEmpty(firstPageText))
@@ -141,6 +145,9 @@ namespace PDFControls
                 if (!string.IsNullOrEmpty(val))
                     info.LatestCode = val;
             }
+
+            if (string.Equals(info.LatestCode, "n/a", StringComparison.OrdinalIgnoreCase))
+                info.LatestCode = FindFourDigitValueAfterContexts(firstPageText, latestCodeContexts) ?? info.LatestCode;
 
             DateTime issueDate = DateTime.MinValue;
             DateTime revisedDate = DateTime.MinValue;
@@ -168,15 +175,15 @@ namespace PDFControls
             catch { }
 
             // Try to find expiration/renewal/valid date more robustly
-            var expirationKeywords = new[]
-            {
-                "renewal", "renewal date", "renew", "valid through", "valid thru", "valid until", "valid", "expiration", "expires", "expiration date"
-            };
+            var expirationKeywords = (expirationDateContexts ?? Array.Empty<string>()).ToArray();
             DateTime found;
             if (TryFindDateAfterKeywords(firstPageText, expirationKeywords, out found))
             {
                 expirationDate = found;
             }
+
+            if (TryFindDateAfterKeywords(firstPageText, issueDateContexts?.ToArray() ?? Array.Empty<string>(), out found))
+                issueDate = found;
 
             if (revisedDate > issueDate) issueDate = revisedDate;
 
@@ -278,6 +285,9 @@ namespace PDFControls
             found = DateTime.MinValue;
             if (string.IsNullOrEmpty(text)) return false;
 
+            // Search-engine URLs can contain arbitrary sentences and dates in their query string.
+            text = Regex.Replace(text, @"(?i)\bhttps?://[^\s<>]+|\bwww\.[^\s<>]+", " ");
+
             // Candidate date regexes (common formats)
             var datePatterns = new[]
             {
@@ -324,26 +334,6 @@ namespace PDFControls
                 }
             }
 
-            // fallback: search whole text for any date pattern
-            foreach (var rex in new[]
-                     {
-                         new Regex(@"\b\d{1,2}/\d{1,2}/\d{2,4}\b", RegexOptions.IgnoreCase),
-                         new Regex(@"\b[A-Za-z]{3,9}\s+\d{1,2},\s*\d{4}\b", RegexOptions.IgnoreCase),
-                         new Regex(@"\b[A-Za-z]{3,9}\s+\d{4}\b", RegexOptions.IgnoreCase),
-                         new Regex(@"\b\d{4}\b", RegexOptions.IgnoreCase)
-                     })
-            {
-                var m = rex.Match(text);
-                if (m.Success)
-                {
-                    var candidate = m.Value.Trim();
-                    if (DateTime.TryParse(candidate, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out found))
-                        return true;
-                    if (DateTime.TryParse(candidate, out found))
-                        return true;
-                }
-            }
-
             return false;
 
             static int IndexOfIgnoreCase(string src, string value)
@@ -367,6 +357,26 @@ namespace PDFControls
 
                 return false;
             }
+        }
+
+        private static string? FindFourDigitValueAfterContexts(string text, IEnumerable<string>? contexts)
+        {
+            if (string.IsNullOrWhiteSpace(text) || contexts == null)
+                return null;
+
+            foreach (var context in contexts.Where(c => !string.IsNullOrWhiteSpace(c)))
+            {
+                var index = text.IndexOf(context.Trim(), StringComparison.OrdinalIgnoreCase);
+                if (index < 0)
+                    continue;
+
+                var window = text.Substring(index, Math.Min(180, text.Length - index));
+                var match = Regex.Match(window, @"\b\d{4}\b");
+                if (match.Success)
+                    return match.Value;
+            }
+
+            return null;
         }
     }
 }

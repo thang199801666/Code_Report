@@ -10,11 +10,14 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace CodeReportTracker.ViewModels
 {
@@ -24,21 +27,40 @@ namespace CodeReportTracker.ViewModels
 
         private const int DefaultHttpTimeoutSeconds = 10;
         private const int ExtendedHttpTimeoutSeconds = 60;
+        private const int CpuLimitPercent = 75;
         private const int SniffBufferSize = 8192;
         private const int FileBufferSize = 81920;
         private const string DefaultFileName = "Unnamed";
         private const string PdfExtension = ".pdf";
         private const string PdfFolderName = "Pdf Files";
         private const string SettingsFileName = "settings.json";
+        private const string DefaultLatestCodeContexts = "following code";
+        private const string DefaultIssueDateContexts = "issue;revised;date of revision";
+        private const string DefaultExpirationDateContexts = "renewal;renewal date;renew;valid through;valid thru;valid until;active through;active until;available until;ends on;expiration;expires;expiration date;through the end of;through end of;compliance program through;program through";
+        private const string DefaultAiModelFileName = "SmolLM2-135M-Instruct-Q4_K_M.gguf";
+        private const string ProductCountCacheFileName = "products_cache.json";
+        private const int ConsoleMaxLength = 100000;
 
         #endregion
 
         #region Fields
 
         private string _consoleText = string.Empty;
+        private readonly List<ConsoleLine> _consoleBuffer = new List<ConsoleLine>();
+        private readonly object _consoleLock = new object();
+        private readonly DispatcherTimer _consoleTimer;
+
+        public event Action<ConsoleLine>? ConsoleLineAdded;
         private bool _isBusy;
         private TabViewModel? _selectedTab;
         private readonly string _currentDir = Directory.GetCurrentDirectory();
+        private AiPdfTextExtractor? _aiExtractor;
+        private string? _aiModelFileNameUsed;
+        private readonly Dictionary<string, int> _productCountCache = new(StringComparer.OrdinalIgnoreCase);
+        private double _updateProgress;
+        private bool _isUpdatingProgress;
+        private int _updateProcessed;
+        private int _updateTotal;
 
         // Delegates provided by the View for view-only operations
         private readonly Func<Task>? _searchAction;
@@ -51,7 +73,16 @@ namespace CodeReportTracker.ViewModels
         #region Properties
 
         public ObservableCollection<SettingEntry> Settings { get; }
+        public ObservableCollection<ExtractionContextSettings> ContextSettings { get; }
         public ObservableCollection<TabViewModel> Tabs { get; }
+
+        public AiMode ExtractionMode { get; set; } = AiMode.Ai;
+        public bool CalculateProduct { get; set; } = false;
+        public int CpuPercent { get; set; } = 75;
+        public string AiModelFileName { get; set; } = DefaultAiModelFileName;
+
+        public ObservableCollection<string> AvailableModels { get; } = new ObservableCollection<string>();
+        public string AiModelFolderPath => Path.Combine(AppContext.BaseDirectory, "AIModels");
 
         public TabViewModel? SelectedTab
         {
@@ -81,20 +112,41 @@ namespace CodeReportTracker.ViewModels
             }
         }
 
+        public double UpdateProgress
+        {
+            get => _updateProgress;
+            private set => SetProperty(ref _updateProgress, value);
+        }
+
+        public bool IsUpdatingProgress
+        {
+            get => _isUpdatingProgress;
+            private set => SetProperty(ref _isUpdatingProgress, value);
+        }
+
         #endregion
 
         #region Constructor
 
-        public MainWindowViewModel(
-            Func<Task>? searchAction = null,
-            Action? stopAction = null,
-            Action? selectExcelAction = null,
-            Func<Task>? exportAction = null)
+        public MainWindowViewModel( Func<Task>? searchAction = null,
+                                    Action? stopAction = null,
+                                    Action? selectExcelAction = null,
+                                    Func<Task>? exportAction = null)
         {
             _searchAction = searchAction;
             _stopAction = stopAction;
             _selectExcelAction = selectExcelAction;
             _exportAction = exportAction;
+
+            ContextSettings = new ObservableCollection<ExtractionContextSettings>
+            {
+                new ExtractionContextSettings
+                {
+                    LatestCode = DefaultLatestCodeContexts,
+                    IssueDate = DefaultIssueDateContexts,
+                    ExpirationDate = DefaultExpirationDateContexts
+                }
+            };
 
             Settings = new ObservableCollection<SettingEntry>
             {
@@ -123,17 +175,132 @@ namespace CodeReportTracker.ViewModels
 
             Tabs = new ObservableCollection<TabViewModel> { new TabViewModel("New Tab") };
             SelectedTab = Tabs.FirstOrDefault();
+
+            // Batch console output onto the UI thread so high-frequency logging does not
+            // force WPF to re-render the whole console TextBox on every single line.
+            _consoleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            _consoleTimer.Tick += (_, __) => FlushConsoleBuffer();
+            _consoleTimer.Start();
+
+            LoadProductCountCache();
+        }
+
+        private void LoadProductCountCache()
+        {
+            try
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, ProductCountCacheFileName);
+                if (File.Exists(path))
+                {
+                    var json = File.ReadAllText(path);
+                    var data = JsonSerializer.Deserialize<Dictionary<string, int>>(json, GetJsonOptions());
+                    if (data != null)
+                    {
+                        _productCountCache.Clear();
+                        foreach (var kv in data)
+                            _productCountCache[kv.Key] = kv.Value;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendConsole($"Failed to load product count cache: {ex.Message}");
+            }
+        }
+
+        private void SaveProductCountCache()
+        {
+            try
+            {
+                var path = Path.Combine(AppContext.BaseDirectory, ProductCountCacheFileName);
+                var json = JsonSerializer.Serialize(_productCountCache, GetJsonOptions(writeIndented: true));
+                File.WriteAllText(path, json);
+            }
+            catch (Exception ex)
+            {
+                AppendConsole($"Failed to save product count cache: {ex.Message}");
+            }
+        }
+
+        private void FlushConsoleBuffer()
+        {
+            List<ConsoleLine> pending;
+            lock (_consoleLock)
+            {
+                if (_consoleBuffer.Count == 0)
+                    return;
+                pending = new List<ConsoleLine>(_consoleBuffer);
+                _consoleBuffer.Clear();
+            }
+
+            var sb = new StringBuilder();
+            foreach (var line in pending)
+            {
+                ConsoleLineAdded?.Invoke(line);
+                sb.Append(line.Text).Append(Environment.NewLine);
+            }
+
+            var next = ConsoleText + sb.ToString();
+            if (next.Length > ConsoleMaxLength)
+                next = next.Substring(next.Length - ConsoleMaxLength);
+            ConsoleText = next;
         }
 
         #endregion
 
         #region Public Methods
 
-        public void AppendConsole(string line)
+        public void AppendConsole(string line) => AppendConsoleLine(line, ClassifyConsoleLevel(line));
+
+        public void AppendInfo(string line) => AppendConsoleLine(line, ConsoleLevel.Info);
+
+        public void AppendSuccess(string line) => AppendConsoleLine(line, ConsoleLevel.Success);
+
+        public void AppendWarning(string line) => AppendConsoleLine(line, ConsoleLevel.Warning);
+
+        public void AppendError(string line) => AppendConsoleLine(line, ConsoleLevel.Error);
+
+        private void AppendConsoleLine(string line, ConsoleLevel level)
         {
-            ConsoleText = string.IsNullOrEmpty(ConsoleText)
-                ? line + Environment.NewLine
-                : ConsoleText + line + Environment.NewLine;
+            lock (_consoleLock)
+                _consoleBuffer.Add(new ConsoleLine(line ?? string.Empty, level));
+        }
+
+        private static ConsoleLevel ClassifyConsoleLevel(string line)
+        {
+            var text = line ?? string.Empty;
+            if (text.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("failed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("exception", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("unable to", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("cannot", StringComparison.OrdinalIgnoreCase) >= 0)
+                return ConsoleLevel.Error;
+
+            if (text.IndexOf("warning", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("cancelled", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("skipped", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("skipping", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("aborted", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("not found", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no link", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no text", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no rows", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("no matching", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("empty", StringComparison.OrdinalIgnoreCase) >= 0)
+                return ConsoleLevel.Warning;
+
+            if (text.IndexOf("successfully", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("finished.", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("saved to", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("imported", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("downloaded", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                text.IndexOf("completed", StringComparison.OrdinalIgnoreCase) >= 0)
+                return ConsoleLevel.Success;
+
+            return ConsoleLevel.Info;
         }
 
         public void SaveSettings()
@@ -143,7 +310,12 @@ namespace CodeReportTracker.ViewModels
                 var settingsPath = GetSettingsPath();
                 var appSettings = new AppSettings
                 {
-                    WebSettings = new List<SettingEntry>(Settings)
+                    WebSettings = new List<SettingEntry>(Settings),
+                    ContextSettings = ContextSettings.FirstOrDefault(),
+                    ExtractionMode = ExtractionMode.ToString(),
+                    CalculateProduct = CalculateProduct,
+                    CpuPercent = CpuPercent,
+                    AiModelFileName = AiModelFileName,
                 };
 
                 var json = JsonSerializer.Serialize(appSettings, GetJsonOptions(writeIndented: true));
@@ -182,6 +354,23 @@ namespace CodeReportTracker.ViewModels
                     }
                 }
 
+                if (loadedSettings != null)
+                {
+                    ExtractionMode = ParseExtractionMode(loadedSettings.ExtractionMode);
+                    CalculateProduct = loadedSettings.CalculateProduct ?? false;
+                    CpuPercent = loadedSettings.CpuPercent ?? 75;
+                    AiModelFileName = string.IsNullOrWhiteSpace(loadedSettings.AiModelFileName)
+                        ? DefaultAiModelFileName
+                        : loadedSettings.AiModelFileName;
+                }
+
+                if (loadedSettings?.ContextSettings != null)
+                {
+                    ContextSettings.Clear();
+                    ContextSettings.Add(loadedSettings.ContextSettings);
+                }
+                EnsureContextDefaults();
+
                 AppendConsole($"Settings loaded from: {settingsPath}");
             }
             catch (Exception ex)
@@ -189,6 +378,35 @@ namespace CodeReportTracker.ViewModels
                 AppendConsole($"Failed to load settings: {ex.Message}");
                 AppendConsole("Using default settings.");
             }
+
+            RefreshAvailableModels();
+        }
+
+        public void RefreshAvailableModels()
+        {
+            AvailableModels.Clear();
+            try
+            {
+                var dir = AiModelFolderPath;
+                if (Directory.Exists(dir))
+                {
+                    foreach (var file in Directory.EnumerateFiles(dir, "*.gguf", SearchOption.TopDirectoryOnly)
+                        .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase))
+                    {
+                        AvailableModels.Add(Path.GetFileName(file));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendConsole($"Failed to scan AI models folder: {ex.Message}");
+            }
+
+            if (AvailableModels.Count == 0)
+                AvailableModels.Add(DefaultAiModelFileName);
+
+            if (!AvailableModels.Contains(AiModelFileName))
+                AiModelFileName = AvailableModels[0];
         }
 
         #endregion
@@ -269,6 +487,7 @@ namespace CodeReportTracker.ViewModels
             }
 
             AppendConsole("Check Link for Reports started: checking PDF existence for selected table...");
+            ResetPdfTimeoutState(rowList);
 
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(DefaultHttpTimeoutSeconds) };
             int maxConcurrency = CalculateMaxConcurrency(2);
@@ -281,6 +500,7 @@ namespace CodeReportTracker.ViewModels
 
             AppendConsole($"Check Link for Reports finished on tab '{SelectedTab?.Header ?? "Unknown"}'.");
         }
+
 
         public async Task UpdateDateTimeAsync(CancellationToken token = default)
         {
@@ -295,21 +515,72 @@ namespace CodeReportTracker.ViewModels
             }
 
             AppendConsole("Search started: reading first page of PDFs for selected table...");
+            ResetPdfTimeoutState(rowList);
+            StartProgress(rowList.Count);
 
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(ExtendedHttpTimeoutSeconds) };
 
-            foreach (var code in rowList)
-            {
-                if (token.IsCancellationRequested)
+            var maxConcurrency = CalculateMaxConcurrency(2);
+            using var extractionSemaphore = new SemaphoreSlim(maxConcurrency);
+            var extractedTextQueue = Channel.CreateBounded<(CodeItem code, string text)>(
+                new BoundedChannelOptions(Math.Max(4, maxConcurrency * 2))
                 {
-                    AppendConsole("Search cancelled.");
-                    break;
-                }
+                    FullMode = BoundedChannelFullMode.Wait,
+                    SingleReader = true,
+                    SingleWriter = false
+                });
 
-                await ProcessCodeUpdateAsync(code, http, token).ConfigureAwait(false);
+            // PDF extraction is parallel; AI consumption remains strictly single-threaded.
+            var aiConsumer = ConsumeExtractedTextAsync(extractedTextQueue.Reader, token);
+            var extractionTasks = rowList.Select(code =>
+                ExtractCodeTextToQueueAsync(code, http, extractionSemaphore, extractedTextQueue.Writer, token)).ToList();
+
+            try
+            {
+                await Task.WhenAll(extractionTasks).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                // cancelled - fall through so the consumer is awaited/stopped below.
+            }
+            finally
+            {
+                extractedTextQueue.Writer.TryComplete();
             }
 
-            AppendConsole("Search finished.");
+            try
+            {
+                // The consumer stops as soon as the token is cancelled (see ConsumeExtractedTextAsync).
+                await aiConsumer.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                // cancelled - ignore.
+            }
+
+            EndProgress();
+            AppendConsole(token.IsCancellationRequested ? "Search cancelled." : "Search finished.");
+        }
+
+        private void StartProgress(int total)
+        {
+            _updateProcessed = 0;
+            _updateTotal = total;
+            UpdateProgress = 0;
+            IsUpdatingProgress = true;
+        }
+
+        private void EndProgress()
+        {
+            UpdateProgress = 0;
+            IsUpdatingProgress = false;
+        }
+
+        private void AdvanceProgress()
+        {
+            var processed = Interlocked.Increment(ref _updateProcessed);
+            var total = _updateTotal;
+            UpdateProgress = total > 0 ? Math.Min(100.0, processed * 100.0 / total) : 0;
         }
 
         public async Task UpdateDateTimeLocalAsync(CancellationToken token = default)
@@ -370,10 +641,19 @@ namespace CodeReportTracker.ViewModels
             ResetDownloadProgress(rowList);
 
             var tasks = rowList.Select(code => DownloadSinglePdfAsync(code, destFolder, http, semaphore, token)).ToList();
-            var results = await Task.WhenAll(tasks).ConfigureAwait(false);
+            (CodeItem code, bool success, string message)[] results;
+            try
+            {
+                results = await Task.WhenAll(tasks).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                AppendConsole("Download cancelled.");
+                return;
+            }
 
             ProcessDownloadResults(results);
-            AppendConsole("Download finished.");
+            AppendConsole(token.IsCancellationRequested ? "Download cancelled." : "Download finished.");
         }
 
         #endregion
@@ -425,9 +705,12 @@ namespace CodeReportTracker.ViewModels
             if (token.IsCancellationRequested)
                 return;
 
-            await semaphore.WaitAsync(token).ConfigureAwait(false);
+            var semaphoreEntered = false;
             try
             {
+                await semaphore.WaitAsync(token).ConfigureAwait(false);
+                semaphoreEntered = true;
+
                 var (exists, newLink) = await CheckCodeExistsAsync(code, http, settingsList, token).ConfigureAwait(false);
 
                 SafeDispatch(() =>
@@ -445,13 +728,19 @@ namespace CodeReportTracker.ViewModels
 
                 AppendConsole($"Checked {code.Number}: PDF {(exists ? "found" : "missing")}");
             }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                MarkPdfCheckTimedOut(code);
+                AppendConsole($"Skipped {code.Number}: PDF URL timed out.");
+            }
             catch (Exception ex)
             {
                 AppendConsole($"Error checking {code.Number}: {ex.Message}");
             }
             finally
             {
-                semaphore.Release();
+                if (semaphoreEntered)
+                    semaphore.Release();
             }
         }
 
@@ -470,10 +759,11 @@ namespace CodeReportTracker.ViewModels
             {
                 var uri = new Uri(code.Link);
                 if ((uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
-                    await TryHeadIsPdfAsync(http, uri, token).ConfigureAwait(false))
+                    await TryUrlHasPdfAsync(http, uri, token).ConfigureAwait(false))
                 {
                     return (true, null);
                 }
+
             }
 
             // Try mapping
@@ -567,6 +857,14 @@ namespace CodeReportTracker.ViewModels
                 return string.Equals(media, "application/pdf", StringComparison.OrdinalIgnoreCase) ||
                        uri.AbsolutePath.EndsWith(PdfExtension, StringComparison.OrdinalIgnoreCase);
             }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 return false;
@@ -576,6 +874,120 @@ namespace CodeReportTracker.ViewModels
         #endregion
 
         #region Helper Methods - PDF Processing
+
+        private async Task ExtractCodeTextToQueueAsync(
+            CodeItem code,
+            HttpClient http,
+            SemaphoreSlim extractionSemaphore,
+            ChannelWriter<(CodeItem code, string text)> writer,
+            CancellationToken token)
+        {
+            if (token.IsCancellationRequested)
+                return;
+
+            await extractionSemaphore.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                // If the row has no link, resolve the PDF URL from the configured settings links.
+                var link = code.Link;
+                if (string.IsNullOrWhiteSpace(link))
+                {
+                    var settingsList = Settings?.ToList() ?? new List<SettingEntry>();
+                    var mapping = await TryFindMappedPdfAsync(http, code.Number ?? string.Empty, settingsList, token).ConfigureAwait(false);
+                    if (mapping.found && !string.IsNullOrWhiteSpace(mapping.foundLink))
+                    {
+                        link = mapping.foundLink;
+                        SafeDispatch(() => code.Link = link);
+                    }
+                    else
+                    {
+                        AppendConsole($"Skipping {code.Number}: no link.");
+                        UpdateCodeWithoutPages(code);
+                        AdvanceProgress();
+                        return;
+                    }
+                }
+
+                var pages = await TryExtractFirstPageTextAsync(link, http, token).ConfigureAwait(false);
+                if (pages == null || pages.Length == 0)
+                {
+                    UpdateCodeWithoutPages(code);
+                    AppendConsole($"No text extracted for {code.Number} (first page empty or not available).");
+                    AdvanceProgress();
+                    return;
+                }
+
+                await writer.WriteAsync((code, pages[0] ?? string.Empty), token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                MarkPdfCheckTimedOut(code);
+                AppendConsole($"Skipped {code.Number}: PDF URL timed out.");
+                AdvanceProgress();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                AppendConsole($"Error extracting {code.Number}: {ex.Message}");
+            }
+            finally
+            {
+                extractionSemaphore.Release();
+            }
+        }
+
+        private static async Task<bool> TryUrlHasPdfAsync(HttpClient http, Uri uri, CancellationToken token)
+        {
+            try
+            {
+                await PdfTextExtractor.DownloadPdfBytesFromUrlAsync(http, uri.AbsoluteUri, token).ConfigureAwait(false);
+                return true;
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (HttpRequestException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+        }
+
+        private async Task ConsumeExtractedTextAsync(
+            ChannelReader<(CodeItem code, string text)> reader,
+            CancellationToken token)
+        {
+            await foreach (var item in reader.ReadAllAsync(token).ConfigureAwait(false))
+            {
+                if (token.IsCancellationRequested)
+                    break;
+
+                try
+                {
+                    var parsed = await ParsePdfTextAsync(item.code, item.text, token).ConfigureAwait(false);
+                    ApplyParsedPdfInfo(item.code, parsed);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    AppendConsole($"Error processing {item.code.Number}: {ex.Message}");
+                }
+                finally
+                {
+                    AdvanceProgress();
+                }
+            }
+        }
 
         private async Task ProcessCodeUpdateAsync(CodeItem code, HttpClient http, CancellationToken token)
         {
@@ -595,7 +1007,7 @@ namespace CodeReportTracker.ViewModels
                     return;
                 }
 
-                var parsed = ParsePdfText(code, pages[0] ?? string.Empty);
+                var parsed = await ParsePdfTextAsync(code, pages[0] ?? string.Empty, token).ConfigureAwait(false);
                 ApplyParsedPdfInfo(code, parsed);
             }
             catch (OperationCanceledException)
@@ -644,7 +1056,7 @@ namespace CodeReportTracker.ViewModels
                     return;
                 }
 
-                var parsed = await Task.Run(() => ParsePdfText(code, pages[0] ?? string.Empty), token).ConfigureAwait(false);
+                var parsed = await ParsePdfTextAsync(code, pages[0] ?? string.Empty, token).ConfigureAwait(false);
                 ApplyParsedPdfInfo(code, parsed);
                 AppendConsole($"Successfully updated {code.Number} from local PDF");
             }
@@ -696,17 +1108,133 @@ namespace CodeReportTracker.ViewModels
         {
             SafeDispatch(() =>
             {
-                code.HasUpdate = true;
+                code.HasCheck = true;
+                code.HasUpdate = false;
                 code.CodeExists = false;
-                code.LastCheck = DateTime.Now.ToString("MM-dd-yyyy HH:mm:ss");
             });
         }
 
-        private PdfTextComparer.PdfCodeInfo? ParsePdfText(CodeItem code, string firstPageText)
+        private async Task<PdfTextComparer.PdfCodeInfo?> ParsePdfTextAsync(CodeItem code, string firstPageText, CancellationToken token)
         {
             var matchedSetting = GetMatchingSettingForCode(code.Number);
             var isIcc = IsIccSource(code, matchedSetting);
-            return isIcc ? PdfTextComparer.ParseIccEs(firstPageText) : PdfTextComparer.ParseIapmo(firstPageText);
+            var contextSettings = ContextSettings.FirstOrDefault() ?? new ExtractionContextSettings();
+            var latestContexts = SplitContextText(contextSettings.LatestCode);
+            var issueContexts = SplitContextText(contextSettings.IssueDate);
+            var expirationContexts = SplitContextText(contextSettings.ExpirationDate);
+            var parsed = isIcc
+                ? PdfTextComparer.ParseIccEs(firstPageText, latestContexts, issueContexts, expirationContexts)
+                : PdfTextComparer.ParseIapmo(firstPageText, latestContexts, issueContexts, expirationContexts);
+
+            // Run the (slow) AI model according to the selected mode:
+            //  - Ai:     AI is authoritative and checks every field; Regex is only a fallback.
+            //  - Hybrid: Regex is authoritative; AI only fills fields Regex could not find.
+            //  - NonAi:  no AI at all.
+            var useAi = ExtractionMode != AiMode.NonAi;
+            var regexMissing = IsMissingValue(parsed.LatestCode) ||
+                               IsMissingValue(parsed.IssueDate) ||
+                               IsMissingValue(parsed.ExpirationDate);
+            var codeKey = code.Number?.Trim() ?? string.Empty;
+            var productsResolvableWithoutAi = !CalculateProduct ||
+                                              (codeKey.Length > 0 && _productCountCache.ContainsKey(codeKey)) ||
+                                              CountProductsFromDescription(code.Description).HasValue;
+
+            // In Ai mode we always consult the model; in Hybrid mode only when it can help.
+            var needsAi = ExtractionMode == AiMode.Ai || regexMissing || !productsResolvableWithoutAi;
+
+            if (useAi && needsAi)
+            {
+                try
+                {
+                    var modelFile = string.IsNullOrWhiteSpace(AiModelFileName) ? DefaultAiModelFileName : AiModelFileName;
+                    if (_aiExtractor == null || _aiModelFileNameUsed != modelFile)
+                    {
+                        _aiExtractor?.Dispose();
+                        _aiExtractor = new AiPdfTextExtractor(Path.Combine(AppContext.BaseDirectory, "AIModels", modelFile), CpuPercent);
+                        _aiModelFileNameUsed = modelFile;
+                    }
+                    var aiContexts = latestContexts.Concat(issueContexts).Concat(expirationContexts).ToArray();
+                    var ai = await _aiExtractor.ExtractAsync(firstPageText, aiContexts, token, CalculateProduct).ConfigureAwait(false);
+                    if (ai != null)
+                    {
+                        if (ExtractionMode == AiMode.Ai)
+                        {
+                            // AI is authoritative; Regex only fills what AI could not determine.
+                            if (!IsMissingValue(ai.LatestCode))
+                                parsed.LatestCode = ai.LatestCode;
+                            if (!IsMissingValue(ai.IssueDate))
+                                parsed.IssueDate = ai.IssueDate;
+                            if (!IsMissingValue(ai.ExpirationDate))
+                                parsed.ExpirationDate = ai.ExpirationDate;
+                        }
+                        else // Hybrid - Regex is authoritative; AI only fills missing fields.
+                        {
+                            if (IsMissingValue(parsed.LatestCode) && !IsMissingValue(ai.LatestCode))
+                                parsed.LatestCode = ai.LatestCode;
+                            if (IsMissingValue(parsed.IssueDate) && !IsMissingValue(ai.IssueDate))
+                                parsed.IssueDate = ai.IssueDate;
+                            if (IsMissingValue(parsed.ExpirationDate) && !IsMissingValue(ai.ExpirationDate))
+                                parsed.ExpirationDate = ai.ExpirationDate;
+                        }
+
+                        if (CalculateProduct && ai.ProductsCount.HasValue)
+                            parsed.ProductsCount = ai.ProductsCount.Value;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendConsole($"AI extraction unavailable; Regex result kept: {ex.Message}");
+                }
+            }
+
+            if (CalculateProduct)
+                parsed.ProductsCount = ResolveProductCount(code, parsed);
+
+            return parsed;
+        }
+
+        // Counts products for a report: reuse the learned cache value, otherwise count the
+        // product codes from the Description, and only fall back to the AI result. The outcome
+        // is remembered so the next run reuses it instead of recomputing.
+        private int? ResolveProductCount(CodeItem code, PdfTextComparer.PdfCodeInfo parsed)
+        {
+            var key = code.Number?.Trim();
+            if (string.IsNullOrWhiteSpace(key))
+                return parsed.ProductsCount;
+
+            if (_productCountCache.TryGetValue(key, out var cached))
+                return cached;
+
+            var count = CountProductsFromDescription(code.Description);
+            if (count == null || count <= 0)
+                count = parsed.ProductsCount;
+
+            if (count.HasValue)
+            {
+                _productCountCache[key] = count.Value;
+                SaveProductCountCache();
+            }
+
+            return count;
+        }
+
+        private static int? CountProductsFromDescription(string? description)
+        {
+            if (string.IsNullOrWhiteSpace(description))
+                return null;
+
+            var text = description;
+            var colon = text.IndexOf(':');
+            if (colon >= 0 && colon < text.Length)
+                text = text.Substring(colon + 1);
+
+            var items = text
+                .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => x.Length > 0)
+                .ToList();
+
+            return items.Count > 0 ? items.Count : (int?)null;
         }
 
         private void ApplyParsedPdfInfo(CodeItem code, PdfTextComparer.PdfCodeInfo? parsed)
@@ -718,17 +1246,28 @@ namespace CodeReportTracker.ViewModels
                     code.LatestCode_Old = code.LatestCode;
                     code.IssueDate_Old = code.IssueDate;
                     code.ExpirationDate_Old = code.ExpirationDate;
+                    code.ProductsListed_Old = code.ProductsListed;
 
                     code.LatestCode = parsed?.LatestCode ?? string.Empty;
                     code.IssueDate = parsed?.IssueDate ?? "n/a";
                     code.ExpirationDate = parsed?.ExpirationDate ?? "n/a";
 
+                    if (CalculateProduct && parsed?.ProductsCount.HasValue == true)
+                        code.ProductsListed = parsed.ProductsCount.Value.ToString();
+
+                    code.HasCheck = true;
                     code.CodeExists = true;
-                    code.HasUpdate = true;
-                    code.LastCheck = DateTime.Now.ToString("MM-dd-yyyy HH:mm:ss");
+                    code.IsPdfCheckTimedOut = false;
+                    code.HasUpdate = HasValueChanged(code.LatestCode, code.LatestCode_Old) ||
+                                     HasValueChanged(code.IssueDate, code.IssueDate_Old) ||
+                                     HasValueChanged(code.ExpirationDate, code.ExpirationDate_Old) ||
+                                     HasValueChanged(code.ProductsListed, code.ProductsListed_Old);
                 });
 
                 LogCodeChanges(code);
+
+                if (CalculateProduct && parsed?.ProductsCount.HasValue == true)
+                    AppendConsole($"{code.Number} products listed -> {parsed.ProductsCount.Value}");
             }
             catch (Exception ex)
             {
@@ -740,19 +1279,58 @@ namespace CodeReportTracker.ViewModels
         {
             var changes = new List<string>();
 
-            if (!string.Equals(code.LatestCode, code.LatestCode_Old, StringComparison.OrdinalIgnoreCase))
+            if (HasValueChanged(code.LatestCode, code.LatestCode_Old))
                 changes.Add($"LatestCode: '{code.LatestCode_Old}' -> '{code.LatestCode}'");
 
-            if (!string.Equals(code.IssueDate, code.IssueDate_Old, StringComparison.OrdinalIgnoreCase))
+            if (HasValueChanged(code.IssueDate, code.IssueDate_Old))
                 changes.Add($"IssueDate: '{code.IssueDate_Old}' -> '{code.IssueDate}'");
 
-            if (!string.Equals(code.ExpirationDate, code.ExpirationDate_Old, StringComparison.OrdinalIgnoreCase))
+            if (HasValueChanged(code.ExpirationDate, code.ExpirationDate_Old))
                 changes.Add($"ExpirationDate: '{code.ExpirationDate_Old}' -> '{code.ExpirationDate}'");
 
             if (changes.Count == 0)
                 AppendConsole($"No changes detected for {code.Number} (first page parsed).");
             else
                 changes.ForEach(c => AppendConsole($"{code.Number} updated: {c}"));
+        }
+
+        private static bool IsMissingValue(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ||
+                   string.Equals(value.Trim(), "n/a", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string[] SplitContextText(string? value)
+        {
+            return (value ?? string.Empty)
+                .Split(new[] { ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(context => context.Trim())
+                .Where(context => context.Length > 0)
+                .ToArray();
+        }
+
+        private void EnsureContextDefaults()
+        {
+            var contexts = ContextSettings.FirstOrDefault();
+            if (contexts == null)
+            {
+                ContextSettings.Add(new ExtractionContextSettings());
+                contexts = ContextSettings[0];
+            }
+
+            if (string.IsNullOrWhiteSpace(contexts.LatestCode))
+                contexts.LatestCode = DefaultLatestCodeContexts;
+            if (string.IsNullOrWhiteSpace(contexts.IssueDate))
+                contexts.IssueDate = DefaultIssueDateContexts;
+            if (string.IsNullOrWhiteSpace(contexts.ExpirationDate))
+                contexts.ExpirationDate = DefaultExpirationDateContexts;
+        }
+
+        private static bool HasValueChanged(string? current, string? previous)
+        {
+            var normalizedCurrent = IsMissingValue(current) ? "n/a" : current!.Trim();
+            var normalizedPrevious = IsMissingValue(previous) ? "n/a" : previous!.Trim();
+            return !string.Equals(normalizedCurrent, normalizedPrevious, StringComparison.OrdinalIgnoreCase);
         }
 
         private async Task<string[]?> TryExtractFirstPageTextAsync(string link, HttpClient? http, CancellationToken token)
@@ -769,6 +1347,9 @@ namespace CodeReportTracker.ViewModels
 
                     if (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
                     {
+                        if (http != null)
+                            return await PdfTextExtractor.ExtractTextPerPageFromUrlAsync(link, http, token).ConfigureAwait(false);
+
                         return await PdfTextExtractor.ExtractTextPerPageFromUrlAsync(link, token).ConfigureAwait(false);
                     }
                 }
@@ -776,6 +1357,10 @@ namespace CodeReportTracker.ViewModels
                 {
                     return PdfTextExtractor.ExtractTextPerPage(link);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch { /* Best effort attempt */ }
 
@@ -903,33 +1488,12 @@ namespace CodeReportTracker.ViewModels
             HttpClient http,
             CancellationToken token)
         {
-            using var req = new HttpRequestMessage(HttpMethod.Get, uri);
-            using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-
-            if (!resp.IsSuccessStatusCode)
-            {
-                SafeDispatch(() => code.DownloadProcess = 0);
-                return (code, false, $"HTTP {(int)resp.StatusCode}");
-            }
-
             var fileName = GenerateFileName(code, uri);
             var target = Path.Combine(destFolder, fileName);
 
-            using var responseStream = await resp.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-
-            // Sniff content to verify PDF
-            var sniffBuffer = new byte[SniffBufferSize];
-            int sniffRead = await responseStream.ReadAsync(sniffBuffer, 0, sniffBuffer.Length, token).ConfigureAwait(false);
-
-            if (!IsPdfContent(sniffBuffer, sniffRead))
-            {
-                SafeDispatch(() => code.DownloadProcess = 0);
-                var ct = resp.Content.Headers.ContentType?.MediaType ?? "(no content-type)";
-                return (code, false, $"Downloaded content is not a PDF. Content-Type: {ct}");
-            }
-
-            // Write to file with progress tracking
-            await WriteStreamToFileAsync(responseStream, target, sniffBuffer, sniffRead, resp.Content.Headers.ContentLength, code, token).ConfigureAwait(false);
+            // The source may be an HTML viewer page rather than the PDF endpoint.
+            var bytes = await PdfTextExtractor.DownloadPdfBytesFromUrlAsync(uri.AbsoluteUri, token).ConfigureAwait(false);
+            await File.WriteAllBytesAsync(target, bytes, token).ConfigureAwait(false);
 
             SafeDispatch(() => code.DownloadProcess = 100);
             return (code, true, target);
@@ -1221,7 +1785,30 @@ namespace CodeReportTracker.ViewModels
 
         private static int CalculateMaxConcurrency(int multiplier)
         {
-            return Math.Clamp(Environment.ProcessorCount * multiplier, 4, multiplier == 4 ? 32 : 16);
+            var cpuWorkerLimit = Math.Max(1, (int)Math.Ceiling(Environment.ProcessorCount * CpuLimitPercent / 100d));
+            var requested = Environment.ProcessorCount * multiplier;
+            return Math.Clamp(requested, 1, cpuWorkerLimit);
+        }
+
+        private void ResetPdfTimeoutState(IEnumerable<CodeItem> rows)
+        {
+            SafeDispatch(() =>
+            {
+                foreach (var code in rows)
+                    code.IsPdfCheckTimedOut = false;
+            });
+        }
+
+        private void MarkPdfCheckTimedOut(CodeItem code)
+        {
+            SafeDispatch(() =>
+            {
+                code.IsPdfCheckTimedOut = true;
+                code.CodeExists = false;
+                code.HasCheck = true;
+                code.HasUpdate = false;
+                code.LastCheck = DateTime.Now.ToString("MM-dd-yyyy HH:mm:ss");
+            });
         }
 
         private void SafeDispatch(Action action)
@@ -1261,7 +1848,7 @@ namespace CodeReportTracker.ViewModels
 
                 if (Uri.TryCreate(normalizedBase, UriKind.Absolute, out var baseUri))
                 {
-                    var escaped = Uri.EscapeUriString(fileName);
+                    var escaped = Uri.EscapeDataString(fileName);
                     return new Uri(baseUri, escaped);
                 }
 
@@ -1271,7 +1858,7 @@ namespace CodeReportTracker.ViewModels
 
                 if (Uri.TryCreate(prefixed, UriKind.Absolute, out baseUri))
                 {
-                    var escaped = Uri.EscapeUriString(fileName);
+                    var escaped = Uri.EscapeDataString(fileName);
                     return new Uri(baseUri, escaped);
                 }
             }
@@ -1284,9 +1871,48 @@ namespace CodeReportTracker.ViewModels
 
         #region Nested Classes
 
+        public enum ConsoleLevel
+        {
+            Info,
+            Success,
+            Warning,
+            Error
+        }
+
+        public enum AiMode
+        {
+            Ai,
+            NonAi,
+            Hybrid
+        }
+
+        private static AiMode ParseExtractionMode(string? value)
+        {
+            if (Enum.TryParse<AiMode>(value, true, out var mode))
+                return mode;
+            return AiMode.Ai;
+        }
+
+        public sealed class ConsoleLine
+        {
+            public string Text { get; }
+            public ConsoleLevel Level { get; }
+
+            public ConsoleLine(string text, ConsoleLevel level)
+            {
+                Text = text;
+                Level = level;
+            }
+        }
+
         private class AppSettings
         {
             public List<SettingEntry>? WebSettings { get; set; }
+            public ExtractionContextSettings? ContextSettings { get; set; }
+            public string? ExtractionMode { get; set; }
+            public bool? CalculateProduct { get; set; }
+            public int? CpuPercent { get; set; }
+            public string? AiModelFileName { get; set; }
         }
 
         #endregion

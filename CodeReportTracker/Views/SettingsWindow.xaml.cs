@@ -15,12 +15,57 @@ namespace CodeReportTracker
     public partial class SettingsWindow : Window
     {
         private readonly MainWindowViewModel _vm;
+        private bool _cpuWarningShown;
 
         public SettingsWindow(MainWindowViewModel vm)
         {
             InitializeComponent();
             _vm = vm ?? throw new ArgumentNullException(nameof(vm));
             DataContext = _vm;
+            _vm.RefreshAvailableModels();
+            _cpuWarningShown = _vm.CpuPercent > 75;
+        }
+
+        private void OpenModelFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var dir = _vm.AiModelFolderPath;
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                WinUxMessageBox.Show("Failed to open AI models folder: " + ex.Message,
+                    "Open Folder Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        private void CpuPercentSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            if (_vm == null) return;
+
+            if (e.NewValue > 75 && !_cpuWarningShown)
+            {
+                _cpuWarningShown = true;
+                WinUxMessageBox.Show(
+                    $"Using more than 75% of the available CPUs ({_vm.CpuPercent}%) for the AI model may slow down other applications.\n\nYou can still continue.",
+                    "CPU Usage Warning",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            else if (e.NewValue <= 75)
+            {
+                _cpuWarningShown = false;
+            }
         }
 
         // Open HTTP/HTTPS links in default browser

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using UglyToad.PdfPig;
@@ -19,6 +20,8 @@ namespace PDFControls
     public static class PdfTextExtractor
     {
         private static readonly HttpClient s_httpClient = new HttpClient();
+        private const int MaxEmbeddedPdfDepth = 3;
+        private const int MaxEmbeddedPdfCandidates = 20;
 
         /// <summary>
         /// Extracts all text from a PDF file on disk (all pages concatenated).
@@ -248,9 +251,7 @@ namespace PDFControls
 
             try
             {
-                using var response = await s_httpClient.GetAsync(uri, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                var bytes = await DownloadPdfBytesFromUrlAsync(s_httpClient, uri, cancellationToken).ConfigureAwait(false);
                 return ExtractTextFromBytes(bytes);
             }
             catch (HttpRequestException ex)
@@ -280,9 +281,7 @@ namespace PDFControls
 
             try
             {
-                using var response = await s_httpClient.GetAsync(uri, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                var bytes = await DownloadPdfBytesFromUrlAsync(s_httpClient, uri, cancellationToken).ConfigureAwait(false);
 
                 // Reuse same logic as ExtractTextPerPage by opening the bytes as a stream.
                 using var ms = new MemoryStream(bytes);
@@ -323,9 +322,7 @@ namespace PDFControls
 
             try
             {
-                using var response = await s_httpClient.GetAsync(uri, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                var bytes = await DownloadPdfBytesFromUrlAsync(s_httpClient, uri, cancellationToken).ConfigureAwait(false);
 
                 using var ms = new MemoryStream(bytes);
                 using var document = PdfDocument.Open(ms);
@@ -359,9 +356,7 @@ namespace PDFControls
 
             try
             {
-                using var response = await s_httpClient.GetAsync(uri, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
-                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+                var bytes = await DownloadPdfBytesFromUrlAsync(s_httpClient, uri, cancellationToken).ConfigureAwait(false);
 
                 using var ms = new MemoryStream(bytes);
                 using var document = PdfDocument.Open(ms);
@@ -396,6 +391,162 @@ namespace PDFControls
         public static string[] ExtractTextPerPageFromUrl(string url, CancellationToken cancellationToken = default)
         {
             return ExtractTextPerPageFromUrlAsync(url, cancellationToken).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Downloads a PDF directly or resolves a page containing an embedded PDF.
+        /// Supports iframe/embed/object URLs and relative PDF links.
+        /// </summary>
+        public static async Task<byte[]> DownloadPdfBytesFromUrlAsync(string url, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentNullException(nameof(url));
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                throw new ArgumentException("URL must be an absolute HTTP/HTTPS URI.", nameof(url));
+
+            return await DownloadPdfBytesFromUrlAsync(s_httpClient, uri, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Downloads a PDF directly or through an embedded viewer using the caller's HttpClient.
+        /// </summary>
+        public static async Task<byte[]> DownloadPdfBytesFromUrlAsync(
+            HttpClient httpClient,
+            string url,
+            CancellationToken cancellationToken = default)
+        {
+            if (httpClient == null) throw new ArgumentNullException(nameof(httpClient));
+            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentNullException(nameof(url));
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                throw new ArgumentException("URL must be an absolute HTTP/HTTPS URI.", nameof(url));
+
+            return await DownloadPdfBytesFromUrlAsync(httpClient, uri, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static async Task<byte[]> DownloadPdfBytesFromUrlAsync(
+            HttpClient httpClient,
+            Uri uri,
+            CancellationToken cancellationToken,
+            int depth = 0)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+
+            if (IsPdfBytes(bytes))
+                return bytes;
+
+            if (depth >= MaxEmbeddedPdfDepth)
+                throw new InvalidOperationException("The URL did not resolve to a PDF after following embedded PDF links.");
+
+            var mediaType = response.Content.Headers.ContentType?.MediaType;
+            var isHtml = string.IsNullOrWhiteSpace(mediaType) || mediaType.Contains("html", StringComparison.OrdinalIgnoreCase) || LooksLikeHtml(bytes);
+            if (!isHtml)
+                throw new InvalidOperationException($"The URL did not return a PDF. Content-Type: {mediaType ?? "(none)"}");
+
+            var html = Encoding.UTF8.GetString(bytes);
+            foreach (var embeddedUrl in FindEmbeddedPdfUrls(html, uri))
+            {
+                try
+                {
+                    return await DownloadPdfBytesFromUrlAsync(httpClient, embeddedUrl, cancellationToken, depth + 1).ConfigureAwait(false);
+                }
+                catch (HttpRequestException)
+                {
+                    // A page can contain several viewers; try the next candidate.
+                }
+                catch (InvalidOperationException)
+                {
+                    // Candidate may be another viewer page rather than the PDF itself.
+                }
+            }
+
+            throw new InvalidOperationException("No embedded PDF URL was found in the page.");
+        }
+
+        private static bool IsPdfBytes(byte[] bytes)
+        {
+            return bytes.Length >= 5 && bytes[0] == '%' && bytes[1] == 'P' && bytes[2] == 'D' && bytes[3] == 'F' && bytes[4] == '-';
+        }
+
+        private static bool LooksLikeHtml(byte[] bytes)
+        {
+            var preview = Encoding.UTF8.GetString(bytes, 0, Math.Min(bytes.Length, 512));
+            return preview.IndexOf("<html", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   preview.IndexOf("<iframe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   preview.IndexOf("<embed", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   preview.IndexOf("<object", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static IEnumerable<Uri> FindEmbeddedPdfUrls(string html, Uri pageUri)
+        {
+            var candidates = new List<string>();
+            const string quotedValue = "(?<value>[^\"']+)";
+            var attributePattern = $"<(?:iframe|embed|object|param)\\b[^>]*?(?:src|data|value)\\s*=\\s*[\"']{quotedValue}[\"']";
+            foreach (Match match in Regex.Matches(html, attributePattern, RegexOptions.IgnoreCase))
+                candidates.Add(WebUtility.HtmlDecode(match.Groups["value"].Value));
+
+            // A direct PDF link is also commonly rendered as an anchor on viewer pages.
+            foreach (Match match in Regex.Matches(html, $"<a\\b[^>]*?href\\s*=\\s*[\"']{quotedValue}[\"']", RegexOptions.IgnoreCase))
+            {
+                var value = WebUtility.HtmlDecode(match.Groups["value"].Value);
+                if (value.Contains(".pdf", StringComparison.OrdinalIgnoreCase) ||
+                    value.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+                    candidates.Add(value);
+            }
+
+            // Some viewers put the PDF in a JavaScript/config value instead of an HTML attribute.
+            foreach (Match match in Regex.Matches(html, "(?<value>(?:https?:)?//[^\"'\\s<>]+\\.pdf(?:\\?[^\"'\\s<>]*)?|[^\"'\\s<>]+\\.pdf(?:\\?[^\"'\\s<>]*)?)", RegexOptions.IgnoreCase))
+                candidates.Add(WebUtility.HtmlDecode(match.Groups["value"].Value));
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var candidateCount = 0;
+            foreach (var candidate in candidates)
+            {
+                if (candidateCount++ >= MaxEmbeddedPdfCandidates)
+                    yield break;
+
+                var value = Uri.UnescapeDataString(candidate.Trim());
+                if (value.StartsWith("//", StringComparison.Ordinal))
+                    value = pageUri.Scheme + ":" + value;
+                if (Uri.TryCreate(pageUri, value, out var resolved) &&
+                    (resolved.Scheme == Uri.UriSchemeHttp || resolved.Scheme == Uri.UriSchemeHttps) &&
+                    seen.Add(resolved.AbsoluteUri))
+                    yield return resolved;
+            }
+        }
+
+        /// <summary>
+        /// Extracts per-page text using the caller's HttpClient so its timeout applies to embedded pages.
+        /// </summary>
+        public static async Task<string[]> ExtractTextPerPageFromUrlAsync(
+            string url,
+            HttpClient httpClient,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(url)) throw new ArgumentNullException(nameof(url));
+            if (httpClient == null) throw new ArgumentNullException(nameof(httpClient));
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                throw new ArgumentException("URL must be an absolute HTTP/HTTPS URI.", nameof(url));
+
+            try
+            {
+                var bytes = await DownloadPdfBytesFromUrlAsync(httpClient, uri, cancellationToken).ConfigureAwait(false);
+                using var ms = new MemoryStream(bytes);
+                using var document = PdfDocument.Open(ms);
+                return document.GetPages().OrderBy(p => p.Number).Select(p => p.Text ?? string.Empty).ToArray();
+            }
+            catch (HttpRequestException ex)
+            {
+                throw new InvalidOperationException("Failed to download PDF from URL.", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Failed to extract per-page text from PDF at URL.", ex);
+            }
         }
     }
 }

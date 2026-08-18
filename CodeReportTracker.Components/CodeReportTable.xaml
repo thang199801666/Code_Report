@@ -51,6 +51,10 @@
                   MinRowHeight="22"
                   CanUserResizeRows="False"
                   EnableRowVirtualization="True"
+                  GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="#E6EAF0"
+                  RowBackground="White"
+                  AlternatingRowBackground="#F4F8FD"
                   IsReadOnly="False">
 
             <!-- Ensure the Paste command is available when focus is inside the DataGrid (cells, editors, etc.) -->
@@ -85,7 +89,6 @@
                     <Setter Property="TextWrapping" Value="NoWrap" />
                     <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                     <Setter Property="VerticalAlignment" Value="Center" />
-                    <Setter Property="Background" Value="White" />
                     <Setter Property="FontSize" Value="11" />
                     <Setter Property="Padding" Value="0" />
                     <Setter Property="Margin" Value="0" />
@@ -140,15 +143,24 @@
                         <Setter.Value>
                             <DataTemplate>
                                 <TextBlock HorizontalAlignment="Stretch"
-                                           VerticalAlignment="Stretch"
+                                           VerticalAlignment="Center"
                                            TextWrapping="NoWrap"
                                            TextTrimming="CharacterEllipsis"
-                                           Text="{Binding}" />
+                                           Text="{Binding}"
+                                           Foreground="#0B4F8C"
+                                           FontWeight="SemiBold" />
                             </DataTemplate>
                         </Setter.Value>
                     </Setter>
                     <Setter Property="ToolTip" Value="{Binding}" />
                     <Setter Property="HorizontalContentAlignment" Value="Center" />
+                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                    <Setter Property="Background" Value="#F1F6FB" />
+                    <Setter Property="Foreground" Value="#0B4F8C" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                    <Setter Property="Padding" Value="8,6" />
+                    <Setter Property="BorderBrush" Value="#D6E9FF" />
+                    <Setter Property="BorderThickness" Value="0,0,1,1" />
                     <!-- header-level right-click still available -->
                     <EventSetter Event="MouseRightButtonUp" Handler="ColumnHeader_MouseRightButtonUp"/>
                 </Style>
@@ -175,6 +187,11 @@
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter Property="Background" Value="#FF84AEF3" />
                         </Trigger>
+                        <DataTrigger Binding="{Binding IsPdfCheckTimedOut}" Value="True">
+                            <Setter Property="Background" Value="LightGray" />
+                            <Setter Property="Foreground" Value="Gray" />
+                            <Setter Property="Opacity" Value="0.65" />
+                        </DataTrigger>
                     </Style.Triggers>
                 </Style>
 
@@ -219,12 +236,20 @@
                             </Setter>
 
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding CodeExists}" Value="True">
-                                    <Setter Property="Background" Value="LightGreen"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding CodeExists}" Value="False">
-                                    <Setter Property="Background" Value="LightCoral"/>
-                                </DataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding HasCheck}" Value="True" />
+                                        <Condition Binding="{Binding CodeExists}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Background" Value="LightGreen" />
+                                </MultiDataTrigger>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding HasCheck}" Value="True" />
+                                        <Condition Binding="{Binding CodeExists}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Background" Value="LightCoral" />
+                                </MultiDataTrigger>
                             </Style.Triggers>
                         </Style>
                     </DataGridTemplateColumn.CellStyle>
@@ -280,6 +305,22 @@
                     <DataGridTextColumn.CellStyle>
                         <Style TargetType="DataGridCell">
                             <Setter Property="TextBlock.TextAlignment" Value="Center" />
+                            <Setter Property="Background">
+                                <Setter.Value>
+                                    <MultiBinding Converter="{StaticResource ColorConverter}">
+                                         <Binding Path="ProductsListed_Old" />
+                                         <Binding Path="ProductsListed" />
+                                         <Binding Path="HasCheck" />
+                                    </MultiBinding>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <!-- Override both background and foreground for visibility when selected -->
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </DataGridTextColumn.CellStyle>
                     <DataGridTextColumn.ElementStyle>
@@ -289,6 +330,18 @@
                             <Setter Property="TextWrapping" Value="NoWrap" />
                             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                             <Setter Property="TextAlignment" Value="Center" />
+                            <Setter Property="ToolTip">
+                                <Setter.Value>
+                                    <TextBlock>
+                                        <TextBlock.Text>
+                                            <MultiBinding StringFormat="Old Data  : {0} &#10;New Data : {1}">
+                                                <Binding Path="ProductsListed_Old" />
+                                                <Binding Path="ProductsListed" />
+                                            </MultiBinding>
+                                        </TextBlock.Text>
+                                    </TextBlock>
+                                </Setter.Value>
+                            </Setter>
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                     <DataGridTextColumn.EditingElementStyle>
@@ -312,11 +365,19 @@
                             <Setter Property="Background">
                                 <Setter.Value>
                                     <MultiBinding Converter="{StaticResource ColorConverter}">
-                                        <Binding Path="LatestCode_Old" />
-                                        <Binding Path="LatestCode" />
+                                         <Binding Path="LatestCode_Old" />
+                                         <Binding Path="LatestCode" />
+                                         <Binding Path="HasCheck" />
                                     </MultiBinding>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <!-- Override both background and foreground for visibility when selected -->
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </DataGridTextColumn.CellStyle>
                     <DataGridTextColumn.ElementStyle>
@@ -360,11 +421,19 @@
                             <Setter Property="Background">
                                 <Setter.Value>
                                     <MultiBinding Converter="{StaticResource ColorConverter}">
-                                        <Binding Path="IssueDate_Old" />
-                                        <Binding Path="IssueDate" />
+                                         <Binding Path="IssueDate_Old" />
+                                         <Binding Path="IssueDate" />
+                                         <Binding Path="HasCheck" />
                                     </MultiBinding>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <!-- Override both background and foreground for visibility when selected -->
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </DataGridTextColumn.CellStyle>
                     <DataGridTextColumn.ElementStyle>
@@ -411,11 +480,19 @@
                             <Setter Property="Background">
                                 <Setter.Value>
                                     <MultiBinding Converter="{StaticResource ColorConverter}">
-                                        <Binding Path="ExpirationDate_Old" />
-                                        <Binding Path="ExpirationDate" />
+                                         <Binding Path="ExpirationDate_Old" />
+                                         <Binding Path="ExpirationDate" />
+                                         <Binding Path="HasCheck" />
                                     </MultiBinding>
                                 </Setter.Value>
                             </Setter>
+                            <Style.Triggers>
+                                <!-- Override both background and foreground for visibility when selected -->
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.HighlightBrushKey}}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.HighlightTextBrushKey}}" />
+                                </Trigger>
+                            </Style.Triggers>
                         </Style>
                     </DataGridTextColumn.CellStyle>
                     <DataGridTextColumn.ElementStyle>

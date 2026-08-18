@@ -35,6 +35,8 @@ namespace CodeReportTracker.Core.Persistence
     ///
     /// Format v2: same as v1 but appends:
     ///     - byte CodeExists (0/1)
+    ///
+    /// Format v3: same as v2 but writes ProductsListed_Old right after ProductsListed.
     /// 
     /// Note: Save() intentionally no longer persists HasCheck/HasUpdate or DownloadProcess values.
     ///       Those flags/values are always written as 0 when saving so files do not retain
@@ -43,7 +45,7 @@ namespace CodeReportTracker.Core.Persistence
     public static class BinaryCrpSerializer
     {
         private const string Magic = "CRPB";
-        private const byte CurrentVersion = 2;
+        private const byte CurrentVersion = 3;
 
         public static void Save(string filePath, IEnumerable<TabModel> tabs)
         {
@@ -75,6 +77,7 @@ namespace CodeReportTracker.Core.Persistence
                     WriteString(bw, it?.ProductCategory);
                     WriteString(bw, it?.Description);
                     WriteString(bw, it?.ProductsListed);
+                    WriteString(bw, it?.ProductsListed_Old);
                     WriteString(bw, it?.LatestCode);
                     WriteString(bw, it?.LatestCode_Old);
                     WriteString(bw, it?.IssueDate);
@@ -125,6 +128,11 @@ namespace CodeReportTracker.Core.Persistence
                 if (version == 2)
                 {
                     return LoadV2(br);
+                }
+
+                if (version == 3)
+                {
+                    return LoadV3(br);
                 }
 
                 // future: add migration handlers for newer versions
@@ -197,6 +205,48 @@ namespace CodeReportTracker.Core.Persistence
                         ProductCategory = ReadString(br) ?? string.Empty,
                         Description = ReadString(br) ?? string.Empty,
                         ProductsListed = ReadString(br) ?? string.Empty,
+                        LatestCode = ReadString(br) ?? string.Empty,
+                        LatestCode_Old = ReadString(br) ?? string.Empty,
+                        IssueDate = ReadString(br) ?? string.Empty,
+                        IssueDate_Old = ReadString(br) ?? string.Empty,
+                        ExpirationDate = ReadString(br) ?? string.Empty,
+                        ExpirationDate_Old = ReadString(br) ?? string.Empty,
+                        DownloadProcess = br.ReadInt32(),
+                        LastCheck = ReadString(br) ?? string.Empty,
+                        HasCheck = br.ReadByte() != 0,
+                        HasUpdate = br.ReadByte() != 0,
+                        CodeExists = br.ReadByte() != 0
+                    };
+                    items.Add(ci);
+                }
+
+                tabs.Add(new TabModel { Header = header, Items = items });
+            }
+
+            return tabs;
+        }
+
+        private static List<TabModel>? LoadV3(BinaryReader br)
+        {
+            var tabs = new List<TabModel>();
+            var tabCount = br.ReadInt32();
+            for (int ti = 0; ti < tabCount; ti++)
+            {
+                var header = ReadString(br) ?? string.Empty;
+                var itemCount = br.ReadInt32();
+                var items = new List<CodeItem>(itemCount);
+
+                for (int ii = 0; ii < itemCount; ii++)
+                {
+                    var ci = new CodeItem
+                    {
+                        Number = ReadString(br) ?? string.Empty,
+                        Link = ReadString(br) ?? string.Empty,
+                        WebType = ReadString(br) ?? string.Empty,
+                        ProductCategory = ReadString(br) ?? string.Empty,
+                        Description = ReadString(br) ?? string.Empty,
+                        ProductsListed = ReadString(br) ?? string.Empty,
+                        ProductsListed_Old = ReadString(br) ?? string.Empty,
                         LatestCode = ReadString(br) ?? string.Empty,
                         LatestCode_Old = ReadString(br) ?? string.Empty,
                         IssueDate = ReadString(br) ?? string.Empty,

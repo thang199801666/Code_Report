@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Local AI models (too large for GitHub, >100MB limit)
+AIModels/
+
+# Stale duplicate copy of the source tree
+CodeReportSource/

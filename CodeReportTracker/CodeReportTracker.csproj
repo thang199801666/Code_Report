@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <Content Include="Application.ico" />
+    <Content Include="..\AIModels\SmolLM2-135M-Instruct-Q4_K_M.gguf">
+      <Link>AIModels\SmolLM2-135M-Instruct-Q4_K_M.gguf</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -29,5 +33,25 @@
     <ProjectReference Include="..\PDFControls\PDFControls.csproj" />
     <ProjectReference Include="..\WinUx.Styles\WinUx.Styles.csproj" />
   </ItemGroup>
+
+  <!-- The PDF project targets net8.0 while this app targets net8.0-windows.
+       Copy explicitly so incremental builds cannot leave an older PDFControls.dll. -->
+  <Target Name="CopyPdfControlsToAppOutput" AfterTargets="Build">
+    <Copy SourceFiles="..\PDFControls\bin\$(Configuration)\net8.0\PDFControls.dll"
+          DestinationFolder="$(TargetDir)"
+          SkipUnchangedFiles="false" />
+  </Target>
+
+  <!-- LLamaSharp.Backend.Cpu 0.25 ships four identical-named native libraries under
+       runtimes\win-x64\native\{avx,avx2,avx512,noavx}. During a RID-specific publish all
+       four are flattened to the same relative path, causing NETSDK1152 (duplicate publish
+       output files). Keep only the avx variant, matching what the RID build output uses. -->
+  <Target Name="RemoveDuplicateLlamaNativeFiles" BeforeTargets="_HandleFileConflictsForPublish">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+          Condition="$([System.String]::Copy('%(ResolvedFileToPublish.Identity)').Contains('llamasharp.backend.cpu'))
+                     and !$([System.String]::Copy('%(ResolvedFileToPublish.Identity)').Contains('\native\avx\'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>

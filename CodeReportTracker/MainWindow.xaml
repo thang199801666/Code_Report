@@ -20,21 +20,119 @@
                 <ResourceDictionary Source="pack://application:,,,/WinUx.Styles;component/Themes/Generic.xaml"/>
             </ResourceDictionary.MergedDictionaries>
 
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+            <!-- Modern splitter -->
+            <Style x:Key="ModernSplitter" TargetType="GridSplitter">
+                <Setter Property="Height" Value="5"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="ShowsPreview" Value="True"/>
+                <Setter Property="Background" Value="#E2E5EA"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#2B88D8"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+
+            <!-- Modern rounded progress bar -->
+            <Style x:Key="ModernProgressBar" TargetType="ProgressBar">
+                <Setter Property="Height" Value="8"/>
+                <Setter Property="Foreground" Value="#2B88D8"/>
+                <Setter Property="Background" Value="#33557E"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                <Grid ClipToBounds="True">
+                                    <Rectangle x:Name="PART_Track" Fill="Transparent"/>
+                                    <Border x:Name="PART_Indicator"
+                                            Background="{TemplateBinding Foreground}"
+                                            CornerRadius="4"
+                                            HorizontalAlignment="Left"/>
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Modern console panel -->
+            <Style x:Key="ModernConsoleExpander" TargetType="Expander">
+                <Setter Property="Background" Value="#1E2430"/>
+                <Setter Property="BorderBrush" Value="#2A3344"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Expander">
+                            <Border Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+                                    <ToggleButton x:Name="HeaderSite"
+                                                  IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                                  ClickMode="Press"
+                                                  HorizontalAlignment="Stretch"
+                                                  Background="Transparent"
+                                                  BorderThickness="0">
+                                        <ToggleButton.Template>
+                                            <ControlTemplate TargetType="ToggleButton">
+                                                <Border x:Name="Bd" Background="Transparent" Padding="10,7">
+                                                    <DockPanel>
+                                                        <TextBlock x:Name="Arrow" DockPanel.Dock="Left" Text="&#x25BC;"
+                                                                   Foreground="#8FA3BF" FontSize="10" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                        <Border Background="#2B88D8" CornerRadius="3" Width="15" Height="15"
+                                                                Margin="0,0,8,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="&gt;_" FontFamily="Consolas" FontSize="8" Foreground="White"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                        <TextBlock Text="Console" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                                    </DockPanel>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#232B3A"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsChecked" Value="True">
+                                                        <Setter TargetName="Arrow" Property="Text" Value="&#x25B2;"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </ToggleButton.Template>
+                                    </ToggleButton>
+                                    <ContentPresenter x:Name="ContentSite"
+                                                      Grid.Row="1"
+                                                      ContentSource="Content"
+                                                      VerticalAlignment="Stretch"
+                                                      HorizontalAlignment="Stretch"/>
+                                </Grid>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger SourceName="HeaderSite" Property="IsChecked" Value="False">
+                                    <Setter TargetName="ContentSite" Property="Visibility" Value="Collapsed"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- Console style: black background, monospace font, non-wrapping with scrollbars -->
-            <Style x:Key="ConsoleTextBoxStyle" TargetType="TextBox">
+            <Style x:Key="ConsoleTextBoxStyle" TargetType="RichTextBox">
                 <Setter Property="FontFamily" Value="Consolas"/>
                 <Setter Property="FontSize" Value="12"/>
                 <Setter Property="Background" Value="Black"/>
-                <Setter Property="Foreground" Value="LightGreen"/>
+                <Setter Property="Foreground" Value="White"/>
                 <Setter Property="Padding" Value="6"/>
                 <Setter Property="BorderThickness" Value="0"/>
-                <Setter Property="CaretBrush" Value="LightGreen"/>
-                <Setter Property="TextWrapping" Value="NoWrap"/>
-                <Setter Property="AcceptsReturn" Value="True"/>
-                <Setter Property="AcceptsTab" Value="True"/>
-                <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-                <Setter Property="HorizontalScrollBarVisibility" Value="Auto"/>
                 <Setter Property="IsReadOnly" Value="True"/>
+                <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+                <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
                 <Setter Property="SnapsToDevicePixels" Value="True"/>
             </Style>
         </ResourceDictionary>
@@ -92,6 +190,27 @@
                                                                Text="Press F1 for more help"/>
                                                 </StackPanel>
                                             </StackPanel>
+                                        </StackPanel>
+                                    </ToolTip>
+                                </fluent:Button.ToolTip>
+                             </fluent:Button>
+
+                            <fluent:Button x:Name="btnImport"
+                                           Header="Import"
+                                           Margin="2"
+                                           Width="62"
+                                           Click="ImportExcelFile"
+                                           ToolTipService.InitialShowDelay="500"
+                                           ToolTipService.ShowDuration="12000">
+                                <fluent:Button.Icon>
+                                    <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/Excel.png" Margin="1"/>
+                                </fluent:Button.Icon>
+                                <fluent:Button.ToolTip>
+                                    <ToolTip>
+                                        <StackPanel Margin="4">
+                                            <TextBlock Text="Import Excel" FontSize="13" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                                            <TextBlock Text="Import rows into the current table by matching Excel headers, regardless of column order."
+                                                       TextWrapping="Wrap" MaxWidth="280" Foreground="#666"/>
                                         </StackPanel>
                                     </ToolTip>
                                 </fluent:Button.ToolTip>
@@ -327,7 +446,6 @@
                                     </MenuItem>
 
                                     <MenuItem Header="Web Check" 
-                                              Click="btWebCheck_Click" 
                                               StaysOpenOnClick="False">
                                         <MenuItem.Icon>
                                             <Image Source="pack://application:,,,/WinUx.Styles;component/Resources/WebSearch.png" Width="16" Height="16"/>
@@ -770,6 +888,32 @@
             </fluent:Ribbon.Tabs>
         </fluent:Ribbon>
 
+        <!-- Status bar (docked before the fill area so MainGrid fills the rest) -->
+        <StatusBar DockPanel.Dock="Bottom" Height="28" Background="#F1F6FB" BorderBrush="#E2E5EA" BorderThickness="0,1,0,0">
+            <StatusBar.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                    </Grid>
+                </ItemsPanelTemplate>
+            </StatusBar.ItemsPanel>
+            <StatusBarItem Grid.Column="0">
+                <TextBlock Text="{Binding SelectedTab.Header, StringFormat='{}{0}'}" VerticalAlignment="Center"/>
+            </StatusBarItem>
+            <StatusBarItem Grid.Column="1" Visibility="{Binding IsUpdatingProgress, Converter={StaticResource BoolToVis}}">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Updating..." VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <ProgressBar Style="{StaticResource ModernProgressBar}"
+                                 Width="220"
+                                 Maximum="100"
+                                 Value="{Binding UpdateProgress, Mode=OneWay}"/>
+                </StackPanel>
+            </StatusBarItem>
+        </StatusBar>
+
         <!-- Main area -->
         <Grid Margin="6" x:Name="MainGrid">
             <Grid.RowDefinitions>
@@ -795,31 +939,24 @@
                             VerticalAlignment="Stretch"/>
             </Border>
 
-            <GridSplitter Grid.Row="1" 
-                          Height="6" 
-                          HorizontalAlignment="Stretch" 
-                          VerticalAlignment="Center" 
-                          ShowsPreview="True" 
-                          Background="White"/>
+            <GridSplitter Grid.Row="1"
+                          Style="{StaticResource ModernSplitter}"/>
 
             <Expander Grid.Row="2"
                       x:Name="expConsole"
-                      Header="Console"
+                      Style="{StaticResource ModernConsoleExpander}"
                       IsExpanded="True"
-                      Background="#FF2E4368"
-                      Foreground="White"
-                      Padding="4"
-                      Margin="0,2,0,0"
+                      Margin="0,6,0,0"
                       Collapsed="ConsoleExpander_Collapsed"
                       Expanded="ConsoleExpander_Expanded">
-                <TextBox x:Name="tbConsole"
-                         ToolTip="Console output"
-                         Style="{StaticResource ConsoleTextBoxStyle}"
-                         Text="{Binding ConsoleText, Mode=OneWay}"
-                         VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto"
-                         IsReadOnly="True"
-                         TextChanged="Console_TextChanged"/>
+                <RichTextBox x:Name="tbConsole"
+                             ToolTip="Console output"
+                             Style="{StaticResource ConsoleTextBoxStyle}"
+                             Margin="2,0,2,2"
+                             VerticalAlignment="Stretch"
+                             HorizontalAlignment="Stretch"
+                             PreviewMouseWheel="tbConsole_PreviewMouseWheel"
+                             TextChanged="Console_TextChanged"/>
             </Expander>
         </Grid>
     </DockPanel>

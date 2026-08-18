@@ -36,5 +36,6 @@ namespace CodeReportTracker.Models
             get => _pdfFolder;
             set => SetProperty(ref _pdfFolder, value);
         }
+
     }
 }

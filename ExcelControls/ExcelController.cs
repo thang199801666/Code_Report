@@ -91,6 +91,85 @@ namespace ExcelControls
         }
 
         /// <summary>
+        /// Reads every worksheet containing the requested headers. The header row
+        /// may appear below title or date rows, and columns are returned by name.
+        /// </summary>
+        public Dictionary<string, List<Dictionary<string, string>>> ReadRowsByHeadersPerWorksheet(
+            string filePath,
+            IReadOnlyCollection<string> headerNames)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                throw new ArgumentException("Excel file path is required.", nameof(filePath));
+            if (headerNames == null || headerNames.Count == 0)
+                throw new ArgumentException("At least one header name is required.", nameof(headerNames));
+
+            var result = new Dictionary<string, List<Dictionary<string, string>>>(StringComparer.OrdinalIgnoreCase);
+            using var workbook = new XLWorkbook(filePath);
+
+            foreach (var worksheet in workbook.Worksheets)
+            {
+                var range = worksheet.RangeUsed();
+                if (range == null)
+                    continue;
+
+                IXLRangeRow? headerRow = null;
+                var headers = new Dictionary<int, string>();
+                foreach (var row in range.RowsUsed())
+                {
+                    var candidate = row.CellsUsed()
+                        .Select(cell => new { Column = cell.Address.ColumnNumber, Header = cell.GetString().Trim() })
+                        .Where(x => !string.IsNullOrWhiteSpace(x.Header))
+                        .ToList();
+
+                    if (candidate.Any(x => string.Equals(NormalizeHeader(x.Header), "CODEREPORTNO", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        headerRow = row;
+                        var firstColumn = candidate.First(x => string.Equals(
+                            NormalizeHeader(x.Header), "CODEREPORTNO", StringComparison.OrdinalIgnoreCase)).Column;
+                        var previousColumn = firstColumn - 1;
+                        foreach (var item in candidate.Where(x => x.Column >= firstColumn).OrderBy(x => x.Column))
+                        {
+                            // The sample workbook has a second summary table after a blank column.
+                            if (item.Column > previousColumn + 1)
+                                break;
+
+                            headers[item.Column] = item.Header;
+                            previousColumn = item.Column;
+                        }
+                        break;
+                    }
+                }
+
+                if (headerRow == null || headers.Count == 0)
+                    continue;
+
+                var rows = new List<Dictionary<string, string>>();
+                foreach (var row in range.RowsUsed().Where(row => row.RowNumber() > headerRow.RowNumber()))
+                {
+                    var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var header in headers)
+                        values[header.Value] = row.Cell(header.Key).GetFormattedString().Trim();
+
+                    if (values.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+                        rows.Add(values);
+                }
+
+                if (rows.Count > 0)
+                    result[worksheet.Name] = rows;
+            }
+
+            return result;
+        }
+
+        private static string NormalizeHeader(string value)
+        {
+            return new string((value ?? string.Empty)
+                .Where(char.IsLetterOrDigit)
+                .ToArray())
+                .ToUpperInvariant();
+        }
+
+        /// <summary>
         /// Appends data to an existing Excel file
         /// </summary>
         public void AppendData<T>(string filePath, IEnumerable<T> data, string sheetName = "Sheet1")

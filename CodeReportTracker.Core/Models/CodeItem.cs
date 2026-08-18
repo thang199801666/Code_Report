@@ -21,6 +21,7 @@ namespace CodeReportTracker.Core.Models
         private string _productCategory = string.Empty;
         private string _description = string.Empty;
         private string _productsListed = string.Empty;
+        private string _productsListed_Old = string.Empty;
         private string _latestCode = string.Empty;
         private string _latestCode_Old = string.Empty;
         private string _issueDate = string.Empty;
@@ -32,6 +33,7 @@ namespace CodeReportTracker.Core.Models
         private bool _hasCheck;
         private bool _hasUpdate;
         private bool _codeExists = true;
+        private bool _pdfCheckTimedOut;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -79,6 +81,12 @@ namespace CodeReportTracker.Core.Models
         {
             get => _productsListed;
             set => SetProperty(ref _productsListed, value);
+        }
+
+        public string ProductsListed_Old
+        {
+            get => _productsListed_Old;
+            set => SetProperty(ref _productsListed_Old, value);
         }
 
         public string LatestCode
@@ -150,6 +158,16 @@ namespace CodeReportTracker.Core.Models
         {
             get => _codeExists;
             set => SetProperty(ref _codeExists, value);
+        }
+
+        /// <summary>
+        /// True when checking the PDF URL exceeded the HTTP timeout.
+        /// This is a transient UI state and is not persisted.
+        /// </summary>
+        public bool IsPdfCheckTimedOut
+        {
+            get => _pdfCheckTimedOut;
+            set => SetProperty(ref _pdfCheckTimedOut, value);
         }
 
         public CodeItem() { }

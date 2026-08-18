@@ -3,12 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         Title="Settings"
-        Width="720"
-        Height="460"
+        Width="980"
+        Height="560"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResize"
-        MinWidth="480"
-        MinHeight="320">
+        MinWidth="500"
+        MinHeight="340"
+        Background="{StaticResource WindowBackgroundBrush}">
     <Window.Resources>
         <x:Array x:Key="EntryTypes" Type="{x:Type sys:String}">
             <sys:String>ER</sys:String>
@@ -16,21 +17,116 @@
             <sys:String>Other</sys:String>
             <sys:String>Folder</sys:String>
         </x:Array>
+
+        <!-- macOS-like modern slider using the WinUx circular thumb -->
+        <Style x:Key="ModernSlider" TargetType="Slider">
+            <Setter Property="Height" Value="26"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Border Height="6" CornerRadius="3" Background="#E2E5EA"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="Slider.DecreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6" CornerRadius="3" Background="#2B88D8"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.DecreaseRepeatButton>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="Slider.IncreaseLarge" Focusable="False">
+                                        <RepeatButton.Template>
+                                            <ControlTemplate TargetType="RepeatButton">
+                                                <Border Height="6" CornerRadius="3" Background="Transparent"/>
+                                            </ControlTemplate>
+                                        </RepeatButton.Template>
+                                    </RepeatButton>
+                                </Track.IncreaseRepeatButton>
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource FirstModernSliderThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Section label (TextBlock) -->
+        <Style x:Key="ModernFieldLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#444" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+
+        <!-- Lightweight DataGrid style (keeps default template so text always renders) -->
+        <Style x:Key="SettingsDataGrid" TargetType="DataGrid">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#222"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="RowHeight" Value="24"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="CanUserResizeRows" Value="False"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#F3F6FA"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="#E2E5EA"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Auto"/>
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
+            <Style.Resources>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="#F1F6FB"/>
+                    <Setter Property="Foreground" Value="#0B4F8C"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                    <Setter Property="FontSize" Value="12"/>
+                    <Setter Property="Padding" Value="8,5"/>
+                    <Setter Property="BorderBrush" Value="#D6E9FF"/>
+                    <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                </Style>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Padding" Value="8,1"/>
+                    <Setter Property="BorderThickness" Value="0"/>
+                    <Setter Property="VerticalContentAlignment" Value="Center"/>
+                </Style>
+            </Style.Resources>
+        </Style>
+
+        <!-- Card-style section -->
+        <Style x:Key="ModernCard" TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Background" Value="{StaticResource ControlBackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="#E2E5EA"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#333"/>
+        </Style>
     </Window.Resources>
 
-    <Grid Margin="8">
+    <Grid Margin="14">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <GroupBox Header="Link Settings (table)" Grid.Row="0" Margin="0,0,0,8">
+        <GroupBox Header="Link Settings (table)" Grid.Row="0" Style="{StaticResource ModernCard}">
             <DataGrid x:Name="dgSettings"
+                      Style="{StaticResource SettingsDataGrid}"
                       ItemsSource="{Binding Settings}"
                       AutoGenerateColumns="False"
                       CanUserAddRows="True"
                       CanUserDeleteRows="True"
-                      Margin="4"
+                      Margin="2"
                       IsReadOnly="False" RowHeaderWidth="0">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Web Name" 
@@ -39,13 +135,12 @@
                     <DataGridComboBoxColumn Header="Type"
                                             SelectedItemBinding="{Binding Type, Mode=TwoWay}"
                                             ItemsSource="{StaticResource EntryTypes}"
-                                            Width="80"/>
+                                            Width="90"/>
                     <!-- Link column rendered as clickable hyperlink -->
                     <DataGridTemplateColumn Header="Link"
                                             Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
-                                <!-- Single root element for the DataTemplate -->
                                 <TextBlock TextTrimming="CharacterEllipsis">
                                     <TextBlock.ToolTip>
                                         <ToolTip>
@@ -83,9 +178,72 @@
             </DataGrid>
         </GroupBox>
 
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Grid.Row="1" Margin="0,8,0,0">
-            <Button Width="84" Margin="6,0,0,0" Click="Save_Click">Save</Button>
-            <Button Width="84" Margin="6,0,0,0" Click="Cancel_Click">Cancel</Button>
+        <GroupBox Header="Extraction contexts (global)" Grid.Row="1" Style="{StaticResource ModernCard}">
+            <DataGrid Style="{StaticResource SettingsDataGrid}"
+                      ItemsSource="{Binding ContextSettings}"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      IsReadOnly="False"
+                      RowHeaderWidth="0">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Latest Code" Binding="{Binding LatestCode, Mode=TwoWay}" Width="*" />
+                    <DataGridTextColumn Header="Issue/Rev Date" Binding="{Binding IssueDate, Mode=TwoWay}" Width="*" />
+                    <DataGridTextColumn Header="Expiration Date" Binding="{Binding ExpirationDate, Mode=TwoWay}" Width="*" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </GroupBox>
+
+        <GroupBox Header="AI text extraction (optional)" Grid.Row="2" Style="{StaticResource ModernCard}">
+            <StackPanel>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Left" Text="Extraction mode:" Style="{StaticResource ModernFieldLabel}"
+                               Margin="0,0,10,0"/>
+                    <ComboBox Style="{StaticResource FirstModernComboBox}"
+                              SelectedValue="{Binding ExtractionMode, Mode=TwoWay}"
+                              SelectedValuePath="Tag">
+                        <ComboBoxItem Content="AI (model checks dates)" Tag="Ai"/>
+                        <ComboBoxItem Content="Non-AI (Regex only)" Tag="NonAi"/>
+                        <ComboBoxItem Content="Hybrid (Regex + AI fallback)" Tag="Hybrid"/>
+                    </ComboBox>
+                </DockPanel>
+                <CheckBox Content="Calculate Product (count products listed on the PDF page)"
+                          Style="{StaticResource FirstModernCheckBox}"
+                          Margin="0,10,0,0"
+                          IsChecked="{Binding CalculateProduct, Mode=TwoWay}"/>
+
+                <DockPanel Margin="0,14,0,0">
+                    <TextBlock DockPanel.Dock="Left" Text="CPU for AI model:" Style="{StaticResource ModernFieldLabel}"
+                               Margin="0,0,10,0"/>
+                    <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="10,0,0,0"
+                            Background="#EEF3FA" CornerRadius="6" Padding="10,3">
+                        <TextBlock>
+                            <Run Text="{Binding Value, ElementName=CpuSlider, StringFormat={}{0:0}, Mode=OneWay}"/>
+                            <Run Text="%"/>
+                        </TextBlock>
+                    </Border>
+                    <Slider x:Name="CpuSlider" Style="{StaticResource ModernSlider}"
+                            Minimum="1" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                            Value="{Binding CpuPercent, Mode=TwoWay}"
+                            ValueChanged="CpuPercentSlider_ValueChanged"/>
+                </DockPanel>
+
+                <DockPanel Margin="0,14,0,0">
+                    <TextBlock DockPanel.Dock="Left" Text="AI model:" Style="{StaticResource ModernFieldLabel}"
+                               Margin="0,0,10,0"/>
+                    <Button DockPanel.Dock="Right" Content="Open Folder" Margin="10,0,0,0" Padding="12,4"
+                            Style="{StaticResource FirstModernButton}"
+                            Click="OpenModelFolder_Click"/>
+                    <ComboBox Style="{StaticResource FirstModernComboBox}"
+                              ItemsSource="{Binding AvailableModels}"
+                              SelectedItem="{Binding AiModelFileName, Mode=TwoWay}"/>
+                </DockPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Grid.Row="3" Margin="0,4,0,0">
+            <Button Width="96" Margin="8,0,0,0" Style="{StaticResource FirstModernButton}" Click="Save_Click">Save</Button>
+            <Button Width="96" Margin="8,0,0,0" Click="Cancel_Click">Cancel</Button>
         </StackPanel>
     </Grid>
 </Window>
